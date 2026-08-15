@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix SIGE Angola - Sistema Integrado de Gestão Escolar",
+  "description": "Sistema completo de Gestão Escolar adaptado ao contexto angolano (moeda Kwanza Kz, avaliação trimestral MAC/NPP/NPT, emissão de pautas, boletins, pagamentos com multas, matrículas e RBAC estrito).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
