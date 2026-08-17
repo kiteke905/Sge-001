@@ -5,7 +5,7 @@ import {
   FileText, GraduationCap, BookOpen, Calendar, 
   Clock, DollarSign, ShieldAlert, Settings, 
   Award, Layers, CheckCircle2, Lock, UserCheck, Shield,
-  LogOut
+  LogOut, Tag
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -101,7 +101,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'horarios_provas',
           label: 'Horários & Calendário de Provas',
           icon: <Clock className="w-4 h-4" />,
-          allowed: true, // Consultable by all roles
+          badge: role === 'DIRECAO_PEDAGOGICA' ? 'Gestão' : undefined,
+          allowed: true, // Consultable by all roles, editable by Direção Pedagógica
         },
       ],
     },
@@ -113,6 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'Fluxo de Caixa & Despesas',
           icon: <DollarSign className="w-4 h-4" />,
           allowed: role === 'ADMIN' || role === 'GESTOR' || role === 'FINANCAS',
+        },
+        {
+          id: 'servicos_financeiros',
+          label: 'Serviços, Multas & Preçário',
+          icon: <Tag className="w-4 h-4" />,
+          badge: 'Admin / Gestor',
+          allowed: role === 'ADMIN' || role === 'GESTOR',
         },
       ],
     },

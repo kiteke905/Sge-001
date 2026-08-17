@@ -26,13 +26,11 @@ export const CurricularMatrix: React.FC = () => {
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canAssignDiscipline) {
-      alert('Aviso RBAC: Perfil não tem permissão para atribuir matriz curricular.');
       return;
     }
 
     addAssignment(formData);
     setModalOpen(false);
-    alert('Disciplina e Docente atribuídos com sucesso à turma!');
   };
 
   const filteredAssignments = assignments.filter(a => 
@@ -57,27 +55,16 @@ export const CurricularMatrix: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setModalOpen(true)}
-          disabled={isGestorReadOnly}
-          className={`
-            px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs flex items-center gap-2 transition-all
-            ${isGestorReadOnly 
-              ? 'bg-slate-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 active:scale-98'}
-          `}
-        >
-          <Plus className="w-4 h-4" />
-          Nova Atribuição Curricular
-        </button>
+        {canAssignDiscipline && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs flex items-center gap-2 transition-all bg-blue-600 hover:bg-blue-700 active:scale-98 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Atribuição Curricular
+          </button>
+        )}
       </div>
-
-      {isGestorReadOnly && (
-        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-2 text-xs text-amber-900 font-medium">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Restrição RBAC: Gestor não tem autorização para atribuir disciplinas ou alterar a matriz curricular.</span>
-        </div>
-      )}
 
       {/* Filter by Turma */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">

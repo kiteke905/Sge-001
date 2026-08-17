@@ -34,7 +34,7 @@ export const UserManager: React.FC = () => {
     username: '',
     email: '',
     phone: '',
-    password: '',
+    password: 'chave123',
     role: 'PROFESSOR' as UserRole,
     biNumber: '',
     academicDegree: 'LICENCIATURA' as any,
@@ -55,11 +55,13 @@ export const UserManager: React.FC = () => {
     if (!isAdmin && u.role === 'ADMIN') {
       return false; // Hide admin from everyone else
     }
+    const term = (searchTerm || '').toLowerCase().trim();
     const matchSearch = 
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.biNumber?.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      (u.name || '').toLowerCase().includes(term) ||
+      (u.username || '').toLowerCase().includes(term) ||
+      (u.email || '').toLowerCase().includes(term) ||
+      (u.biNumber || '').toLowerCase().includes(term);
     
     const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
     return matchSearch && matchRole;
@@ -151,7 +153,7 @@ export const UserManager: React.FC = () => {
         username: '',
         email: '',
         phone: '',
-        password: '',
+        password: 'chave123',
         role: 'PROFESSOR',
         biNumber: '',
         academicDegree: 'LICENCIATURA',
@@ -243,21 +245,23 @@ export const UserManager: React.FC = () => {
         })}
       </div>
 
-      {/* Privacy Notice Banner */}
-      <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700 flex items-start gap-3">
-        <Shield className="w-4 h-4 text-slate-900 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p>
-            <strong>Regras de Segurança & Visibilidade RBAC:</strong>
-          </p>
-          <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-600">
-            <li>O utilizador <strong>Administrador</strong> está oculto para todos os outros utilizadores.</li>
-            <li>A visualização das palavras-passe e credenciais de acesso é <strong>exclusiva ao Administrador</strong>.</li>
-            <li>Cada utilizador pode editar os seus próprios dados de conta acedendo ao botão <strong>Meu Perfil</strong> no topo.</li>
-            <li>Limites estritos de utilizadores: Admin (1), Gestor (1), Pedagógico (1), Finanças (1), Secretaria (2), Professores (50).</li>
-          </ul>
+      {/* Privacy Notice Banner (Exclusive to Administrator) */}
+      {isAdmin && (
+        <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700 flex items-start gap-3">
+          <Shield className="w-4 h-4 text-slate-900 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p>
+              <strong>Regras de Segurança & Visibilidade RBAC (Apenas Administrador):</strong>
+            </p>
+            <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-600">
+              <li>O utilizador <strong>Administrador</strong> está oculto para todos os outros utilizadores.</li>
+              <li>A visualização das palavras-passe e credenciais de acesso é <strong>exclusiva ao Administrador</strong>.</li>
+              <li>Cada utilizador pode editar os seus próprios dados de conta acedendo ao botão <strong>Meu Perfil</strong> no topo.</li>
+              <li>Limites estritos de utilizadores: Admin (1), Gestor (1), Pedagógico (1), Finanças (1), Secretaria (2), Professores (50).</li>
+            </ul>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -542,14 +546,14 @@ export const UserManager: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Palavra-passe Inicial de Acesso *
+                    Palavra-passe Inicial de Acesso (Padrão: chave123) *
                   </label>
                   <input
                     type="text"
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Ex: sige@2025*User"
+                    placeholder="chave123"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>

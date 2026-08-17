@@ -61,26 +61,26 @@ export const TeacherManager: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canRegisterTeacher) {
-      alert('Aviso RBAC: Perfil não autorizado a registar docentes.');
       return;
     }
 
     if (editingTeacher) {
       updateTeacher(editingTeacher.id, formData);
-      alert('Dados do docente atualizados com sucesso!');
     } else {
       addTeacher(formData);
-      alert('Professor cadastrado com sucesso no corpo docente!');
     }
     setModalOpen(false);
   };
 
-  const filteredTeachers = teachers.filter(t => 
-    !searchQuery ||
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.specialty.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.biNumber.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTeachers = teachers.filter(t => {
+    if (!searchQuery) return true;
+    const term = (searchQuery || '').toLowerCase().trim();
+    return (
+      (t.name || '').toLowerCase().includes(term) ||
+      (t.specialty || '').toLowerCase().includes(term) ||
+      (t.biNumber || '').toLowerCase().includes(term)
+    );
+  });
 
   return (
     <div className="space-y-5">
@@ -100,27 +100,16 @@ export const TeacherManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          disabled={isGestorReadOnly}
-          className={`
-            px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs flex items-center gap-2 transition-all
-            ${isGestorReadOnly 
-              ? 'bg-slate-400 cursor-not-allowed' 
-              : 'bg-indigo-600 hover:bg-indigo-700 active:scale-98'}
-          `}
-        >
-          <Plus className="w-4 h-4" />
-          Cadastrar Novo Professor
-        </button>
+        {canRegisterTeacher && (
+          <button
+            onClick={handleOpenAdd}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs flex items-center gap-2 transition-all bg-indigo-600 hover:bg-indigo-700 active:scale-98 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Cadastrar Novo Professor
+          </button>
+        )}
       </div>
-
-      {isGestorReadOnly && (
-        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-2 text-xs text-amber-900 font-medium">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Restrição RBAC: Gestor não tem autorização para cadastrar ou editar professores.</span>
-        </div>
-      )}
 
       {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">

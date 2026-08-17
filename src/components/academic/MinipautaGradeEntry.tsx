@@ -52,14 +52,14 @@ export const MinipautaGradeEntry: React.FC = () => {
   const assignedTeacher = teachers.find(t => t.id === currentAssignment?.teacherId);
 
   // Verification if the current user is the authorized teacher for this discipline
+  // Strict rule: Grade entry is an action EXCLUSIVE to the teacher assigned to each specific discipline
   const isAuthorizedTeacher = useMemo(() => {
     if (isGestorReadOnly) return false;
-    if (isAdminOrPedagogico) return true;
     if (isTeacherRole) {
-      return currentUser.teacherId && currentAssignment?.teacherId === currentUser.teacherId;
+      return !!(currentUser.teacherId && currentAssignment?.teacherId === currentUser.teacherId);
     }
-    return false;
-  }, [isGestorReadOnly, isAdminOrPedagogico, isTeacherRole, currentUser.teacherId, currentAssignment?.teacherId]);
+    return false; // Admin, Gestor, Direção Pedagógica, etc. have read-only audit access
+  }, [isGestorReadOnly, isTeacherRole, currentUser.teacherId, currentAssignment?.teacherId]);
 
   // Current Assessment Schedule for this assignment and trimester
   const currentSchedule = useMemo(() => {
@@ -279,6 +279,29 @@ export const MinipautaGradeEntry: React.FC = () => {
         </div>
       </div>
 
+      {/* Exclusivity Notice Banner */}
+      {!isAuthorizedTeacher && (
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-start gap-3.5 text-xs text-slate-200 shadow-xs">
+          <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+            <Lock className="w-4 h-4" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-amber-400 uppercase tracking-wide text-[11px]">
+                Regra de Segurança: Ação Exclusiva do Professor Titular
+              </span>
+              <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-0.5 rounded-full border border-slate-700 font-semibold">
+                Modo Leitura / Auditoria
+              </span>
+            </div>
+            <p className="text-slate-300 leading-relaxed">
+              A atribuição e edição de notas na minipauta é uma ação <strong>estritamente exclusiva</strong> ao professor responsável por cada disciplina 
+              {assignedTeacher ? ` (${assignedTeacher.name})` : ''}. Outros utilizadores (Administração, Direção Pedagógica e Secretaria) têm permissão de consulta, auditoria e exportação, não podendo lançar notas diretamente.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Warning for Teacher exclusivity restriction */}
       {isTeacherRole && accessibleAssignments.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 text-xs text-amber-900">
@@ -287,14 +310,6 @@ export const MinipautaGradeEntry: React.FC = () => {
             <p className="font-bold">Nenhuma disciplina atribuída</p>
             <p className="mt-0.5">O seu utilizador não possui disciplinas ou turmas atribuídas na Direção Pedagógica para este ano letivo.</p>
           </div>
-        </div>
-      )}
-
-      {/* Warning for Gestor */}
-      {isGestorReadOnly && (
-        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-2 text-xs text-amber-900 font-medium">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Restrição de Perfil (Gestor Geral): Acesso exclusivo de consulta e supervisão.</span>
         </div>
       )}
 

@@ -15,6 +15,7 @@ import { CurricularMatrix } from './components/academic/CurricularMatrix';
 import { AcademicYearManager } from './components/academic/AcademicYearManager';
 import { TimetableManager } from './components/academic/TimetableManager';
 import { FinancialDashboard } from './components/finance/FinancialDashboard';
+import { FinancialServicesManager } from './components/finance/FinancialServicesManager';
 import { RequerimentosManager } from './components/documents/RequerimentosManager';
 import { AuditLogViewer } from './components/audit/AuditLogViewer';
 import { UserManager } from './components/users/UserManager';
@@ -32,7 +33,7 @@ const MainLayout: React.FC = () => {
 
   // Render active view based on tab
   const renderActiveView = () => {
-    switch (activeTab.toLowerCase()) {
+    switch ((activeTab || 'dashboard').toLowerCase()) {
       case 'dashboard':
         return <OverviewDashboard onNavigateTab={setActiveTab} />;
       case 'estudantes':
@@ -56,6 +57,10 @@ const MainLayout: React.FC = () => {
         return <TimetableManager />;
       case 'financas':
         return <FinancialDashboard />;
+      case 'servicos_financeiros':
+      case 'servicos':
+      case 'produtos':
+        return <FinancialServicesManager />;
       case 'requerimentos':
         return <RequerimentosManager />;
       case 'utilizadores':

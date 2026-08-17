@@ -4,16 +4,17 @@ import {
   Teacher, Subject, CurricularAssignment, Student, GradeRecord, AssessmentSchedule,
   PaymentReceipt, PaymentItem, ExpenseRecord, DocumentRequest, 
   TimetableSlot, ExamSchedule, AuditLog, PaymentMethod, InstitutionInfo,
-  ROLE_QUOTAS, ROLE_LABELS
+  FinancialService, ROLE_QUOTAS, ROLE_LABELS
 } from '../types';
 import { 
   INITIAL_USERS, INITIAL_ACADEMIC_YEARS, INITIAL_COURSES, INITIAL_CLASSES, 
   INITIAL_TURMAS, INITIAL_TEACHERS, INITIAL_SUBJECTS, INITIAL_ASSIGNMENTS, 
   INITIAL_STUDENTS, INITIAL_GRADES, INITIAL_RECEIPTS, INITIAL_EXPENSES, 
   INITIAL_REQUESTS, INITIAL_TIMETABLE, INITIAL_EXAMS, INITIAL_AUDIT_LOGS,
-  INITIAL_ASSESSMENT_SCHEDULES
+  INITIAL_ASSESSMENT_SCHEDULES, INITIAL_FINANCIAL_SERVICES
 } from '../data/mockInitialData';
 import { generateVerificationHash, calculateMT } from '../utils/formatters';
+import { isEnrollmentRequirementsFulfilled } from '../utils/academicUtils';
 
 export const INSTITUTION_INFO: InstitutionInfo = {
   name: 'Complexo Escolar Girassol do Saber',
@@ -69,6 +70,8 @@ interface SchoolContextType {
   setActiveAcademicYear: (id: string) => void;
   addAcademicYear: (year: Omit<AcademicYear, 'id'>) => void;
   updateAcademicYear: (id: string, year: Partial<AcademicYear>) => void;
+  toggleEnrollmentPeriod: (academicYearId: string) => void;
+  toggleConfirmationPeriod: (academicYearId: string) => void;
   addTurma: (turma: Omit<Turma, 'id'>) => void;
   
   // Teachers & Curriculum
@@ -93,6 +96,13 @@ interface SchoolContextType {
   assessmentSchedules: AssessmentSchedule[];
   updateAssessmentSchedule: (assignmentId: string, trimester: 1 | 2 | 3, macDate: string, nptDate: string) => void;
   
+  // Financial Services & Fines Management (Admin & Gestor exclusive)
+  financialServices: FinancialService[];
+  addFinancialService: (serviceData: Omit<FinancialService, 'id' | 'createdAt' | 'updatedAt'>) => FinancialService;
+  updateFinancialService: (id: string, data: Partial<FinancialService>) => void;
+  deleteFinancialService: (id: string) => void;
+  toggleFinancialServiceStatus: (id: string) => void;
+
   // Payments & Cash POS
   receipts: PaymentReceipt[];
   processMultiPayment: (
@@ -132,6 +142,7 @@ interface SchoolContextType {
   canEnterGrades: boolean;
   canManageFinances: boolean;
   canManageAcademicYears: boolean;
+  canManageFinancialServices: boolean;
   canManageUsers: boolean;
   isGestorReadOnly: boolean;
   
@@ -141,7 +152,7 @@ interface SchoolContextType {
 
 const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'SIGE_ANGOLA_DATA_V4';
+const STORAGE_KEY = 'SIGE_ANGOLA_DATA_V5';
 
 export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
@@ -159,6 +170,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [grades, setGrades] = useState<GradeRecord[]>(INITIAL_GRADES);
   const [receipts, setReceipts] = useState<PaymentReceipt[]>(INITIAL_RECEIPTS);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES);
+  const [financialServices, setFinancialServices] = useState<FinancialService[]>(INITIAL_FINANCIAL_SERVICES);
   const [requests, setRequests] = useState<DocumentRequest[]>(INITIAL_REQUESTS);
   const [timetable, setTimetable] = useState<TimetableSlot[]>(INITIAL_TIMETABLE);
   const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>(INITIAL_EXAMS);
@@ -181,6 +193,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
         if (parsed.institution) setInstitution(parsed.institution);
         if (parsed.academicYears) setAcademicYears(parsed.academicYears);
+        if (parsed.financialServices) setFinancialServices(parsed.financialServices);
         if (parsed.turmas) setTurmas(parsed.turmas);
         if (parsed.teachers) setTeachers(parsed.teachers);
         if (parsed.assignments) setAssignments(parsed.assignments);
@@ -208,6 +221,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         isAuthenticated,
         institution,
         academicYears,
+        financialServices,
         turmas,
         teachers,
         assignments,
@@ -225,7 +239,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (e) {
       console.error('Error saving state to localStorage:', e);
     }
-  }, [users, currentUser, isAuthenticated, institution, academicYears, turmas, teachers, assignments, students, grades, receipts, expenses, requests, timetable, examSchedules, assessmentSchedules, auditLogs]);
+  }, [users, currentUser, isAuthenticated, institution, academicYears, financialServices, turmas, teachers, assignments, students, grades, receipts, expenses, requests, timetable, examSchedules, assessmentSchedules, auditLogs]);
 
   const activeAcademicYear = academicYears.find(y => y.status === 'ATIVO') || academicYears[0];
 
@@ -258,9 +272,9 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Auth: Login
   const login = useCallback((usernameOrEmail: string, password?: string): { success: boolean; message?: string } => {
-    const trimmed = usernameOrEmail.trim().toLowerCase();
+    const trimmed = (usernameOrEmail || '').trim().toLowerCase();
     const user = users.find(u => 
-      (u.username?.toLowerCase() === trimmed || u.email.toLowerCase() === trimmed)
+      ((u.username || '').toLowerCase() === trimmed || (u.email || '').toLowerCase() === trimmed)
     );
 
     if (!user) {
@@ -297,17 +311,19 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Switch role helper for quick testing
   const switchRole = useCallback((role: UserRole) => {
-    const matchedUser = users.find(u => u.role === role) || INITIAL_USERS.find(u => u.role === role) || {
-      id: `USR-${role}`,
-      name: `Utilizador (${ROLE_LABELS[role] || role})`,
-      username: role.toLowerCase(),
-      email: `${role.toLowerCase()}@sige.edu.ao`,
-      role,
+    const safeRole = role || 'ADMIN';
+    const roleLower = String(safeRole).toLowerCase();
+    const matchedUser = users.find(u => u.role === safeRole) || INITIAL_USERS.find(u => u.role === safeRole) || {
+      id: `USR-${safeRole}`,
+      name: `Utilizador (${ROLE_LABELS[safeRole] || safeRole})`,
+      username: roleLower,
+      email: `${roleLower}@sige.edu.ao`,
+      role: safeRole,
       status: 'ATIVO' as const,
     };
     setCurrentUser(matchedUser);
     setIsAuthenticated(true);
-    addAuditLog('AUTENTICACAO', 'Troca de Perfil de Utilizador', `Sessão alterada para perfil: ${role} (${matchedUser.name})`);
+    addAuditLog('AUTENTICACAO', 'Troca de Perfil de Utilizador', `Sessão alterada para perfil: ${safeRole} (${matchedUser.name})`);
   }, [users, addAuditLog]);
 
   // Add User with strict quota enforcement & validation
@@ -328,16 +344,20 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     // Check unique username and email
-    if (users.some(u => u.username.toLowerCase() === userData.username.toLowerCase())) {
+    const safeUsername = (userData.username || '').toLowerCase().trim();
+    const safeEmail = (userData.email || '').toLowerCase().trim();
+
+    if (safeUsername && users.some(u => (u.username || '').toLowerCase().trim() === safeUsername)) {
       return { success: false, message: `O nome de utilizador "${userData.username}" já está a ser utilizado.` };
     }
-    if (users.some(u => u.email.toLowerCase() === userData.email.toLowerCase())) {
+    if (safeEmail && users.some(u => (u.email || '').toLowerCase().trim() === safeEmail)) {
       return { success: false, message: `O e-mail "${userData.email}" já está registado.` };
     }
 
     const newId = `USR-${userData.role.substring(0, 3)}-${String(Date.now()).slice(-4)}`;
     const newUser: User = {
       ...userData,
+      password: userData.password?.trim() || 'chave123',
       id: newId,
       createdAt: new Date().toISOString(),
       status: 'ATIVO',
@@ -409,7 +429,13 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addAcademicYear = useCallback((yearData: Omit<AcademicYear, 'id'>) => {
     const id = `AY-${yearData.code.replace('/', '-')}`;
-    const newYear: AcademicYear = { ...yearData, id, name: yearData.name || yearData.code };
+    const newYear: AcademicYear = { 
+      ...yearData, 
+      id, 
+      name: yearData.name || yearData.code,
+      enrollmentStatus: yearData.enrollmentStatus || 'ABERTO',
+      confirmationStatus: yearData.confirmationStatus || 'ABERTO',
+    };
     setAcademicYears(prev => [newYear, ...prev]);
     addAuditLog('CONFIGURACOES', 'Criação de Ano Letivo', `Ano letivo ${yearData.code} adicionado.`);
   }, [addAuditLog]);
@@ -417,6 +443,66 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const updateAcademicYear = useCallback((id: string, yearData: Partial<AcademicYear>) => {
     setAcademicYears(prev => prev.map(y => y.id === id ? { ...y, ...yearData } : y));
     addAuditLog('CONFIGURACOES', 'Edição de Ano Letivo', `Ano letivo ID ${id} atualizado.`);
+  }, [addAuditLog]);
+
+  const toggleEnrollmentPeriod = useCallback((academicYearId: string) => {
+    setAcademicYears(prev => prev.map(y => {
+      if (y.id === academicYearId) {
+        const nextStatus = y.enrollmentStatus === 'ABERTO' ? 'FECHADO' : 'ABERTO';
+        addAuditLog('SECRETARIA', 'Alteração do Período de Matrículas', `Período de Matrículas do ano ${y.code} alterado para: ${nextStatus}`);
+        return { ...y, enrollmentStatus: nextStatus };
+      }
+      return y;
+    }));
+  }, [addAuditLog]);
+
+  const toggleConfirmationPeriod = useCallback((academicYearId: string) => {
+    setAcademicYears(prev => prev.map(y => {
+      if (y.id === academicYearId) {
+        const nextStatus = y.confirmationStatus === 'ABERTO' ? 'FECHADO' : 'ABERTO';
+        addAuditLog('SECRETARIA', 'Alteração do Período de Confirmações', `Período de Confirmações do ano ${y.code} alterado para: ${nextStatus}`);
+        return { ...y, confirmationStatus: nextStatus };
+      }
+      return y;
+    }));
+  }, [addAuditLog]);
+
+  // Financial Services Management (Admin & Gestor)
+  const addFinancialService = useCallback((serviceData: Omit<FinancialService, 'id' | 'createdAt' | 'updatedAt'>): FinancialService => {
+    const id = `SRV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const now = new Date().toISOString();
+    const newService: FinancialService = {
+      ...serviceData,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setFinancialServices(prev => [newService, ...prev]);
+    addAuditLog('FINANCEIRO', 'Cadastro de Serviço Financeiro', `Novo serviço/produto cadastrado: ${newService.name} (${newService.basePrice} Kz)`);
+    return newService;
+  }, [addAuditLog]);
+
+  const updateFinancialService = useCallback((id: string, data: Partial<FinancialService>) => {
+    const now = new Date().toISOString();
+    setFinancialServices(prev => prev.map(s => s.id === id ? { ...s, ...data, updatedAt: now } : s));
+    addAuditLog('FINANCEIRO', 'Atualização de Serviço Financeiro', `Serviço financeiro ID ${id} atualizado.`);
+  }, [addAuditLog]);
+
+  const deleteFinancialService = useCallback((id: string) => {
+    const srv = financialServices.find(s => s.id === id);
+    setFinancialServices(prev => prev.filter(s => s.id !== id));
+    addAuditLog('FINANCEIRO', 'Remoção de Serviço Financeiro', `Serviço financeiro ${srv?.name || id} removido do catálogo.`);
+  }, [financialServices, addAuditLog]);
+
+  const toggleFinancialServiceStatus = useCallback((id: string) => {
+    setFinancialServices(prev => prev.map(s => {
+      if (s.id === id) {
+        const nextStatus = s.status === 'ATIVO' ? 'INATIVO' : 'ATIVO';
+        addAuditLog('FINANCEIRO', 'Alteração de Estado de Serviço', `Serviço ${s.name} alterado para: ${nextStatus}`);
+        return { ...s, status: nextStatus, updatedAt: new Date().toISOString() };
+      }
+      return s;
+    }));
   }, [addAuditLog]);
 
   const addTurma = useCallback((turmaData: Omit<Turma, 'id'>) => {
@@ -459,11 +545,11 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       id,
       studentNumber: currentNumber,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      status: 'MATRICULADO',
+      status: 'PENDENTE_PAGAMENTO',
     };
 
     setStudents(prev => [newStudent, ...prev]);
-    addAuditLog('SECRETARIA', 'Matrícula de Estudante', `Estudante matriculado: ${newStudent.fullName} (Nº Ordem: ${newStudent.studentNumber})`);
+    addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado com estado PENDENTE DE PAGAMENTO: ${newStudent.fullName} (Aguardando 1ª propina e cartão).`);
     return newStudent;
   }, [students.length, addAuditLog]);
 
@@ -474,7 +560,6 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateAssessmentSchedule = useCallback((assignmentId: string, trimester: 1 | 2 | 3, macDate: string, nptDate: string) => {
     if (currentUser?.role !== 'DIRECAO_PEDAGOGICA') {
-      console.warn('Apenas a Direção Pedagógica tem permissão exclusiva para ajustar as datas de abertura de notas.');
       return;
     }
     setAssessmentSchedules(prev => {
@@ -582,9 +667,19 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     setReceipts(prev => [newReceipt, ...prev]);
 
+    // Auto-activate enrollment if student was pending and now paid 1st month tuition and student card
+    if (student.status === 'PENDENTE_PAGAMENTO') {
+      const allUpdatedReceipts = [newReceipt, ...receipts];
+      const check = isEnrollmentRequirementsFulfilled(student.id, allUpdatedReceipts, activeAcademicYear);
+      if (check.fulfilled) {
+        setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: 'MATRICULADO' } : s));
+        addAuditLog('SECRETARIA', 'Efetivação de Matrícula', `Matrícula ativada com sucesso para ${student.fullName} (${student.id}) após liquidação da 1ª propina e cartão.`);
+      }
+    }
+
     addAuditLog('CAIXA_FINANCAS', 'Emissão de Recibo de Pagamento', `Recibo ${receiptNumber} emitido no valor de ${totalPaid} Kz para ${student.fullName}`);
     return newReceipt;
-  }, [students, receipts.length, currentUser?.id, currentUser?.name, addAuditLog]);
+  }, [students, receipts, activeAcademicYear, currentUser?.id, currentUser?.name, addAuditLog]);
 
   const cancelReceipt = useCallback((receiptId: string, reason: string) => {
     setReceipts(prev => prev.map(r => r.id === receiptId ? {
@@ -610,19 +705,30 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const createDocumentRequest = useCallback((reqData: any): DocumentRequest => {
     const seq = requests.length + 1;
     const requestNumber = `REQ-${new Date().getFullYear()}/${String(seq).padStart(4, '0')}`;
+    const student = students.find(s => s.id === reqData.studentId);
+    const turma = turmas.find(t => t.id === student?.turmaId);
+    const course = courses.find(c => c.id === student?.courseId);
     
     const newReq: DocumentRequest = {
       ...reqData,
       id: `REQ-${Date.now()}`,
       requestNumber,
+      protocolNumber: requestNumber,
+      studentName: student?.fullName || reqData.studentName || 'Estudante',
+      studentBi: student?.biNumber || reqData.studentBi || '',
+      turmaName: turma?.name || student?.turmaName || 'Turma Geral',
+      courseName: course?.name || student?.courseName || 'Ensino Geral',
       requestDate: new Date().toISOString().split('T')[0],
+      requestedAt: new Date().toISOString(),
       status: 'PENDENTE',
+      documentType: reqData.type || reqData.documentType || 'DECLARACAO_SEM_NOTAS',
+      type: reqData.type || reqData.documentType || 'DECLARACAO_SEM_NOTAS',
     };
 
     setRequests(prev => [newReq, ...prev]);
-    addAuditLog('DOCUMENTOS', 'Solicitação de Documento', `Requerimento ${requestNumber} emitido para estudante ID ${reqData.studentId}`);
+    addAuditLog('DOCUMENTOS', 'Solicitação de Documento', `Requerimento ${requestNumber} emitido para estudante ${student?.fullName || reqData.studentId}`);
     return newReq;
-  }, [requests.length, addAuditLog]);
+  }, [requests.length, students, turmas, courses, addAuditLog]);
 
   const updateRequestStatus = useCallback((id: string, status: DocumentRequest['status'], notes?: string) => {
     setRequests(prev => prev.map(r => r.id === id ? {
@@ -663,6 +769,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setIsAuthenticated(false);
     setInstitution(INSTITUTION_INFO);
     setAcademicYears(INITIAL_ACADEMIC_YEARS);
+    setFinancialServices(INITIAL_FINANCIAL_SERVICES);
     setTurmas(INITIAL_TURMAS);
     setTeachers(INITIAL_TEACHERS);
     setAssignments(INITIAL_ASSIGNMENTS);
@@ -686,9 +793,10 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const canProcessPayments = (role === 'SECRETARIA' || role === 'ADMIN') && !isGestorReadOnly;
   const canRegisterTeacher = (role === 'DIRECAO_PEDAGOGICA' || role === 'ADMIN') && !isGestorReadOnly;
   const canAssignCurricular = (role === 'DIRECAO_PEDAGOGICA' || role === 'ADMIN') && !isGestorReadOnly;
-  const canEnterGrades = (role === 'PROFESSOR' || role === 'DIRECAO_PEDAGOGICA' || role === 'ADMIN') && !isGestorReadOnly;
+  const canEnterGrades = (role === 'PROFESSOR') && !isGestorReadOnly;
   const canManageFinances = (role === 'FINANCAS' || role === 'ADMIN') && !isGestorReadOnly;
-  const canManageAcademicYears = (role === 'DIRECAO_PEDAGOGICA' || role === 'ADMIN') && !isGestorReadOnly;
+  const canManageAcademicYears = role === 'ADMIN' || role === 'GESTOR';
+  const canManageFinancialServices = role === 'ADMIN' || role === 'GESTOR';
   const canManageUsers = (role === 'ADMIN' || role === 'GESTOR');
 
   return (
@@ -719,6 +827,8 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setActiveAcademicYear: setActiveAcademicYearId,
         addAcademicYear,
         updateAcademicYear,
+        toggleEnrollmentPeriod,
+        toggleConfirmationPeriod,
         addTurma,
         teachers,
         subjects,
@@ -736,6 +846,11 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         saveMinipautaGrades,
         assessmentSchedules,
         updateAssessmentSchedule,
+        financialServices,
+        addFinancialService,
+        updateFinancialService,
+        deleteFinancialService,
+        toggleFinancialServiceStatus,
         receipts,
         processMultiPayment,
         cancelReceipt,
@@ -759,6 +874,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         canEnterGrades,
         canManageFinances,
         canManageAcademicYears,
+        canManageFinancialServices,
         canManageUsers,
         isGestorReadOnly,
         resetToDefaultData,

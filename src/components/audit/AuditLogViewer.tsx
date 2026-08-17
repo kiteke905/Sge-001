@@ -9,11 +9,12 @@ export const AuditLogViewer: React.FC = () => {
   const [selectedModule, setSelectedModule] = useState('ALL');
 
   const filteredLogs = auditLogs.filter(log => {
+    const term = (searchQuery || '').toLowerCase().trim();
     const matchSearch = 
-      !searchQuery ||
-      log.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchQuery.toLowerCase());
+      !term ||
+      (log.description || '').toLowerCase().includes(term) ||
+      (log.userName || '').toLowerCase().includes(term) ||
+      (log.action || '').toLowerCase().includes(term);
 
     const matchModule = selectedModule === 'ALL' || log.module === selectedModule;
     return matchSearch && matchModule;

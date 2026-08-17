@@ -87,6 +87,15 @@ export interface AcademicYear {
   endDate: string;
   status: 'PLANEADO' | 'ATIVO' | 'ENCERRADO';
   currentTrimester: 1 | 2 | 3;
+  // Enrollment and Confirmation Periods (Admin/Gestor exclusive control)
+  enrollmentStartDate?: string;
+  enrollmentEndDate?: string;
+  enrollmentStatus?: 'ABERTO' | 'FECHADO';
+  confirmationStartDate?: string;
+  confirmationEndDate?: string;
+  confirmationStatus?: 'ABERTO' | 'FECHADO';
+  startMonth?: string;
+  tuitionMonths?: string[]; // 10 months list for this academic year
 }
 
 export interface Course {
@@ -174,7 +183,7 @@ export interface Student {
   shift: 'MANHA' | 'TARDE' | 'NOITE';
   studentNumber: number; // Número de ordem na turma
   enrollmentDate: string;
-  status: 'MATRICULADO' | 'CONFIRMADO' | 'TRANSFERIDO' | 'DESISTENTE' | 'SUSPENSO';
+  status: 'PENDENTE_PAGAMENTO' | 'MATRICULADO' | 'CONFIRMADO' | 'TRANSFERIDO' | 'DESISTENTE' | 'SUSPENSO';
   
   // Document checklist
   documentsSubmitted: {
@@ -340,6 +349,37 @@ export interface ExamSchedule {
   examTime: string;
   room: string;
   supervisorTeacherId: string;
+}
+
+export type ServiceTargetAudience = 
+  | 'TODOS' 
+  | 'PRIMARIO' 
+  | 'I_CICLO' 
+  | 'II_CICLO_GERAL' 
+  | 'II_CICLO_TECNICO' 
+  | 'CURSO_ESPECIFICO' 
+  | 'CLASSE_ESPECIFICA';
+
+export interface FinancialService {
+  id: string;
+  code: string;
+  name: string;
+  serviceType: PaymentServiceType;
+  category: 'PROPINA' | 'MATRICULA' | 'CONFIRMACAO' | 'CARTAO' | 'DOCUMENTO' | 'UNIFORME' | 'OUTRO';
+  basePrice: number;
+  description?: string;
+  isMonthly?: boolean;
+  targetAudience: ServiceTargetAudience;
+  targetCourseId?: string;
+  targetClassId?: string;
+  fineEnabled: boolean;
+  finePercentage?: number; // e.g. 10 (%)
+  fineFixedAmount?: number; // in Kz
+  fineDueDay?: number; // e.g. 10 (dia de vencimento do mês)
+  fineDescription?: string;
+  status: 'ATIVO' | 'INATIVO';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuditLog {

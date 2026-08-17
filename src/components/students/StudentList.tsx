@@ -34,12 +34,13 @@ export const StudentList: React.FC = () => {
   // Filtered students list
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
+      const term = (searchQuery || '').toLowerCase().trim();
       const matchSearch = 
-        !searchQuery ||
-        s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.biNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.guardianName.toLowerCase().includes(searchQuery.toLowerCase());
+        !term ||
+        (s.fullName || '').toLowerCase().includes(term) ||
+        (s.id || '').toLowerCase().includes(term) ||
+        (s.biNumber || '').toLowerCase().includes(term) ||
+        (s.guardianName || '').toLowerCase().includes(term);
 
       const matchCourse = selectedCourse === 'ALL' || s.courseId === selectedCourse;
       const matchClass = selectedClass === 'ALL' || s.classId === selectedClass;
@@ -311,8 +312,14 @@ export const StudentList: React.FC = () => {
                       </td>
 
                       <td className="p-3.5 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                          {student.status}
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          student.status === 'MATRICULADO' || student.status === 'CONFIRMADO'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : student.status === 'PENDENTE_PAGAMENTO'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {student.status === 'PENDENTE_PAGAMENTO' ? 'Pendente Pagamento' : student.status}
                         </span>
                       </td>
 
@@ -321,7 +328,7 @@ export const StudentList: React.FC = () => {
                           {/* Cartão de Estudante */}
                           <button
                             onClick={() => setCardModalStudent(student)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                             title="Ver Cartão Magnético do Estudante"
                           >
                             <CreditCard className="w-3.5 h-3.5" />
@@ -330,7 +337,7 @@ export const StudentList: React.FC = () => {
                           {/* Ficha de Matrícula PDF */}
                           <button
                             onClick={() => handleDownloadFicha(student)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
                             title="Descarregar Ficha Oficial de Matrícula (PDF)"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -339,7 +346,7 @@ export const StudentList: React.FC = () => {
                           {/* Boletim de Notas PDF */}
                           <button
                             onClick={() => handleDownloadBoletim(student)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
                             title="Descarregar Boletim de Notas (PDF)"
                           >
                             <Award className="w-3.5 h-3.5" />
@@ -348,25 +355,22 @@ export const StudentList: React.FC = () => {
                           {/* Histórico Financeiro */}
                           <button
                             onClick={() => setHistoryModalStudent(student)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-violet-600 hover:bg-violet-50 transition-colors cursor-pointer"
                             title="Ver Histórico de Pagamentos & Propinas"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Editar */}
-                          <button
-                            onClick={() => handleOpenEdit(student)}
-                            disabled={isGestorReadOnly}
-                            className={`p-1.5 rounded-lg transition-colors ${
-                              isGestorReadOnly 
-                                ? 'text-slate-300 cursor-not-allowed' 
-                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                            }`}
-                            title="Editar Cadastro"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          {canEnrollStudent && (
+                            <button
+                              onClick={() => handleOpenEdit(student)}
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="Editar Cadastro"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

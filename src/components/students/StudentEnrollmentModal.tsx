@@ -140,11 +140,20 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
           </button>
         </div>
 
-        {/* Gestor Banner Warning if restricted */}
-        {isGestorReadOnly && (
-          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-2 text-xs text-amber-900 font-medium">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>Perfil GESTOR ativo: Visualização em modo leitura. Submissão desabilitada.</span>
+        {/* Status notice */}
+        {!studentToEdit && (
+          <div className="bg-amber-50/80 border-b border-amber-200/80 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Regulamento Financeiro:</strong> A matrícula ficará com estado <strong>Pendente de Pagamento</strong> até que seja liquidada a 1ª propina ({activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'}) e a taxa do Cartão de Estudante no Caixa.
+              </span>
+            </div>
+            {activeAcademicYear?.enrollmentStatus === 'FECHADO' && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                Período Encerrado
+              </span>
+            )}
           </div>
         )}
 
