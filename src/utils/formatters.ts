@@ -90,3 +90,15 @@ export function generateVerificationHash(): string {
   const segment = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   return `${segment()}-${segment()}-${segment()}-${segment()}`;
 }
+
+/**
+ * Alterna automaticamente as iniciais de nomes próprios para maiúsculas e o restante para minúsculas
+ * ao deslizar ou inserir espaço (Title Case para nomes pessoais).
+ * Ex: "adão mukendi" -> "Adão Mukendi", "JOÃO BAPTISTA" -> "João Baptista"
+ */
+export function formatNameInput(value: string): string {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .replace(/(?:^|[\s\-'’])[\p{L}]/gu, (match) => match.toUpperCase());
+}

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { backupService } from '../../services/backupService';
 import { isSupabaseConfigured, testSupabaseConnection, SupabaseTestResult } from '../../lib/supabase';
+import { formatNameInput } from '../../utils/formatters';
 
 export const InstitutionSettings: React.FC = () => {
   const { 
@@ -223,8 +224,8 @@ export const InstitutionSettings: React.FC = () => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Ex: Complexo Escolar Girassol do Saber"
+                  onChange={(e) => setFormData({ ...formData, name: formatNameInput(e.target.value) })}
+                  placeholder="Ex: Complexo Escolar St.Roque"
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -346,11 +347,14 @@ export const InstitutionSettings: React.FC = () => {
                 <input
                   type="text"
                   value={formData.directorGeneral || formData.directorName || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    directorGeneral: e.target.value, 
-                    directorName: e.target.value 
-                  })}
+                  onChange={(e) => {
+                    const formatted = formatNameInput(e.target.value);
+                    setFormData({ 
+                      ...formData, 
+                      directorGeneral: formatted, 
+                      directorName: formatted 
+                    });
+                  }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -362,11 +366,14 @@ export const InstitutionSettings: React.FC = () => {
                 <input
                   type="text"
                   value={formData.directorPedagogico || formData.pedagogicalDirectorName || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    directorPedagogico: e.target.value, 
-                    pedagogicalDirectorName: e.target.value 
-                  })}
+                  onChange={(e) => {
+                    const formatted = formatNameInput(e.target.value);
+                    setFormData({ 
+                      ...formData, 
+                      directorPedagogico: formatted, 
+                      pedagogicalDirectorName: formatted 
+                    });
+                  }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -378,11 +385,14 @@ export const InstitutionSettings: React.FC = () => {
                 <input
                   type="text"
                   value={formData.chiefSecretaria || formData.secretariatHeadName || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    chiefSecretaria: e.target.value, 
-                    secretariatHeadName: e.target.value 
-                  })}
+                  onChange={(e) => {
+                    const formatted = formatNameInput(e.target.value);
+                    setFormData({ 
+                      ...formData, 
+                      chiefSecretaria: formatted, 
+                      secretariatHeadName: formatted 
+                    });
+                  }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>

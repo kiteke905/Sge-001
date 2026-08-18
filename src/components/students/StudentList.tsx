@@ -40,7 +40,12 @@ export const StudentList: React.FC = () => {
         (s.fullName || '').toLowerCase().includes(term) ||
         (s.id || '').toLowerCase().includes(term) ||
         (s.biNumber || '').toLowerCase().includes(term) ||
-        (s.guardianName || '').toLowerCase().includes(term);
+        (s.guardianName || '').toLowerCase().includes(term) ||
+        (s.phone || '').toLowerCase().includes(term) ||
+        (s.email || '').toLowerCase().includes(term) ||
+        (s.turmaName || '').toLowerCase().includes(term) ||
+        (s.courseName || '').toLowerCase().includes(term) ||
+        String(s.studentNumber || '').includes(term);
 
       const matchCourse = selectedCourse === 'ALL' || s.courseId === selectedCourse;
       const matchClass = selectedClass === 'ALL' || s.classId === selectedClass;
@@ -206,19 +211,26 @@ export const StudentList: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-slate-400 text-[11px] font-semibold">Estado:</span>
-            {['ALL', 'CONFIRMADO', 'MATRICULADO'].map(st => (
+            {[
+              { id: 'ALL', label: 'Todos' },
+              { id: 'CONFIRMADO', label: 'Confirmados' },
+              { id: 'MATRICULADO', label: 'Matriculados' },
+              { id: 'PENDENTE_PAGAMENTO', label: 'Pendente Pgto' },
+              { id: 'SUSPENSO', label: 'Suspensos' },
+              { id: 'TRANSFERIDO', label: 'Transferidos' },
+            ].map(st => (
               <button
-                key={st}
-                onClick={() => setSelectedStatus(st)}
+                key={st.id}
+                onClick={() => setSelectedStatus(st.id)}
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                  selectedStatus === st 
+                  selectedStatus === st.id 
                     ? 'bg-blue-600 text-white font-bold' 
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {st === 'ALL' ? 'Todos' : st}
+                {st.label}
               </button>
             ))}
           </div>

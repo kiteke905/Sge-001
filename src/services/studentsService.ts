@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { cloudSyncService } from './cloudSyncService';
 import { Student } from '../types';
 
 export const mapDatabaseStudent = (s: any): Student => ({
@@ -61,6 +62,14 @@ export const studentsService = {
   },
 
   async upsertStudent(student: Student): Promise<boolean> {
+    // 1. Persist to Firebase Cloud
+    if (cloudSyncService.isConfigured()) {
+      cloudSyncService.saveDocument('estudantes', student).catch(err => {
+        console.warn('Erro ao sincronizar estudante com o Firebase:', err);
+      });
+    }
+
+    // 2. Persist to Supabase if configured
     if (isSupabaseConfigured()) {
       try {
         const payload = {
@@ -111,6 +120,14 @@ export const studentsService = {
   },
 
   async deleteStudent(id: string): Promise<boolean> {
+    // 1. Delete from Firebase Cloud
+    if (cloudSyncService.isConfigured()) {
+      cloudSyncService.deleteDocument('estudantes', id).catch(err => {
+        console.warn('Erro ao remover estudante do Firebase:', err);
+      });
+    }
+
+    // 2. Delete from Supabase if configured
     if (isSupabaseConfigured()) {
       try {
         const { error } = await supabase

@@ -10,6 +10,7 @@ import {
   UserCheck, GraduationCap, DollarSign, X, Building2, 
   Sparkles, Check, AlertTriangle
 } from 'lucide-react';
+import { formatNameInput } from '../../utils/formatters';
 
 export const UserManager: React.FC = () => {
   const { 
@@ -510,7 +511,7 @@ export const UserManager: React.FC = () => {
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, name: formatNameInput(e.target.value) })}
                     placeholder="Ex: João Baptista da Silva"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />

@@ -33,7 +33,7 @@ import { isFirebaseConfigured } from '../lib/firebase';
 
 
 export const INSTITUTION_INFO: InstitutionInfo = {
-  name: 'Complexo Escolar Girassol do Saber',
+  name: 'Complexo Escolar St.Roque',
   subTitle: 'Ensino Primário, Iº e IIº Ciclos do Ensino Secundário Geral e Técnico',
   logoUrl: '', // Can be customized by Admin
   republicHeader: 'REPÚBLICA DE ANGOLA',
@@ -45,7 +45,7 @@ export const INSTITUTION_INFO: InstitutionInfo = {
   city: 'Luanda',
   province: 'Luanda',
   phone: '+244 923 000 111 / +244 912 000 222',
-  email: 'direcao@girassoldosaber.edu.ao',
+  email: 'direcao@stroque.edu.ao',
   directorGeneral: 'Dra. Maria Antónia Kiala',
   directorName: 'Dra. Maria Antónia Kiala',
   directorPedagogico: 'Prof. Mestre Sebastião Vunge',
@@ -392,7 +392,13 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (typeof parsed.isAuthenticated === 'boolean') {
           setIsAuthenticated(parsed.isAuthenticated);
         }
-        if (parsed.institution) setInstitution(parsed.institution);
+        if (parsed.institution) {
+          if (!parsed.institution.name || parsed.institution.name.includes('Girassol')) {
+            setInstitution({ ...parsed.institution, name: 'Complexo Escolar St.Roque', email: 'direcao@stroque.edu.ao' });
+          } else {
+            setInstitution(parsed.institution);
+          }
+        }
         if (parsed.academicYears) setAcademicYears(parsed.academicYears);
         if (parsed.financialServices) setFinancialServices(parsed.financialServices);
         if (parsed.turmas) setTurmas(parsed.turmas);
@@ -914,34 +920,53 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [addAuditLog]);
 
   const enrollStudent = useCallback((studentData: Omit<Student, 'id' | 'studentNumber' | 'enrollmentDate'>): Student => {
-    const currentNumber = students.length + 1;
-    const id = `EST-${new Date().getFullYear()}-${String(currentNumber).padStart(3, '0')}`;
+    const maxNum = students.reduce((max, s) => Math.max(max, Number(s.studentNumber) || 0), 0);
+    const currentNumber = maxNum > 0 ? maxNum + 1 : students.length + 1;
+    const id = `EST-${new Date().getFullYear()}-${String(currentNumber).padStart(4, '0')}`;
     
+    const targetTurma = turmas.find(t => t.id === studentData.turmaId);
+    const targetCourse = courses.find(c => c.id === studentData.courseId);
+
     const newStudent: Student = {
       ...studentData,
       id,
       studentNumber: currentNumber,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      status: 'PENDENTE_PAGAMENTO',
+      status: studentData.status || 'CONFIRMADO',
+      turmaName: targetTurma?.name || studentData.turmaName || 'Turma Atribuída',
+      courseName: targetCourse?.name || studentData.courseName || 'Geral',
     };
 
     setStudents(prev => [newStudent, ...prev]);
     studentsService.upsertStudent(newStudent);
-    addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado com estado PENDENTE DE PAGAMENTO: ${newStudent.fullName} (Aguardando 1ª propina e cartão).`);
+    if (cloudSyncService.isConfigured()) {
+      cloudSyncService.saveDocument('estudantes', newStudent);
+    }
+    addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado com sucesso: ${newStudent.fullName} (${newStudent.id}) na turma ${newStudent.turmaName}.`);
     return newStudent;
-  }, [students.length, addAuditLog]);
+  }, [students, turmas, courses, addAuditLog]);
 
   const updateStudent = useCallback((id: string, data: Partial<Student>) => {
     setStudents(prev => prev.map(s => {
       if (s.id === id) {
-        const updated = { ...s, ...data };
+        const targetTurma = data.turmaId ? turmas.find(t => t.id === data.turmaId) : undefined;
+        const targetCourse = data.courseId ? courses.find(c => c.id === data.courseId) : undefined;
+        const updated: Student = { 
+          ...s, 
+          ...data,
+          ...(targetTurma ? { turmaName: targetTurma.name } : {}),
+          ...(targetCourse ? { courseName: targetCourse.name } : {}),
+        };
         studentsService.upsertStudent(updated);
+        if (cloudSyncService.isConfigured()) {
+          cloudSyncService.saveDocument('estudantes', updated);
+        }
         return updated;
       }
       return s;
     }));
     addAuditLog('SECRETARIA', 'Atualização de Estudante', `Ficha do estudante ID ${id} atualizada.`);
-  }, [addAuditLog]);
+  }, [turmas, courses, addAuditLog]);
 
   const updateAssessmentSchedule = useCallback((assignmentId: string, trimester: 1 | 2 | 3, macDate: string, nptDate: string) => {
     if (currentUser?.role !== 'DIRECAO_PEDAGOGICA') {

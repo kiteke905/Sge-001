@@ -6,6 +6,7 @@ import {
   Upload, X, Eye, EyeOff, Save, KeyRound, Award, Building2 
 } from 'lucide-react';
 import { ROLE_LABELS } from '../../types';
+import { formatNameInput } from '../../utils/formatters';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -149,7 +150,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                 type="text"
                 required
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(formatNameInput(e.target.value))}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
               />
             </div>

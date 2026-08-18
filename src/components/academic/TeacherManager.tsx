@@ -5,7 +5,7 @@ import {
   GraduationCap, Plus, Search, Edit3, 
   ShieldCheck, Phone, Mail, Award, AlertTriangle 
 } from 'lucide-react';
-import { formatDateAO } from '../../utils/formatters';
+import { formatDateAO, formatNameInput } from '../../utils/formatters';
 
 export const TeacherManager: React.FC = () => {
   const { teachers, addTeacher, updateTeacher, canRegisterTeacher, isGestorReadOnly, assignments, subjects, turmas } = useSchool();
@@ -213,7 +213,7 @@ export const TeacherManager: React.FC = () => {
                   type="text"
                   required
                   value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  onChange={e => setFormData({ ...formData, name: formatNameInput(e.target.value) })}
                   placeholder="Ex: Prof. Dr. Sebastião Vunge"
                   className="w-full py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                 />

@@ -6,6 +6,7 @@ import {
   AlertTriangle, Check, Camera, FileCheck 
 } from 'lucide-react';
 import { generateEnrollmentFormPDF } from '../../utils/pdfGenerator';
+import { formatNameInput } from '../../utils/formatters';
 
 interface StudentEnrollmentModalProps {
   isOpen: boolean;
@@ -202,7 +203,7 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
                     type="text"
                     required
                     value={formData.fullName}
-                    onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                    onChange={e => setFormData({ ...formData, fullName: formatNameInput(e.target.value) })}
                     placeholder="Ex: Adão Baptista Mukendi"
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
@@ -256,7 +257,7 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
                   <input
                     type="text"
                     value={formData.naturality}
-                    onChange={e => setFormData({ ...formData, naturality: e.target.value })}
+                    onChange={e => setFormData({ ...formData, naturality: formatNameInput(e.target.value) })}
                     placeholder="Ex: Maianga, Luanda"
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
@@ -320,7 +321,7 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
                   type="text"
                   required
                   value={formData.guardianName}
-                  onChange={e => setFormData({ ...formData, guardianName: e.target.value })}
+                  onChange={e => setFormData({ ...formData, guardianName: formatNameInput(e.target.value) })}
                   placeholder="Ex: João Baptista Mukendi"
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
@@ -364,7 +365,7 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
                 <input
                   type="text"
                   value={formData.guardianProfession}
-                  onChange={e => setFormData({ ...formData, guardianProfession: e.target.value })}
+                  onChange={e => setFormData({ ...formData, guardianProfession: formatNameInput(e.target.value) })}
                   placeholder="Ex: Engenheiro Civil / Docente"
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
