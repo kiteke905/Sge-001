@@ -674,3 +674,39 @@ VALUES
     ('SRV-EXAM-01', 'EMOL-REC', 'Emolumento de Prova de Exame / Recurso', 'RECURSO_EXAME', 'OUTRO', 5000.00, false, 'TODOS', false, 0.00, 10, NULL, 'ATIVO'),
     ('SRV-FOLH-01', 'FOLH-PROV', 'Caderno / Folha de Prova Trimestral', 'FOLHA_PROVA', 'OUTRO', 1000.00, false, 'TODOS', false, 0.00, 10, NULL, 'ATIVO')
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 010: HABILITAÇÃO DO SUPABASE REALTIME MULTIDISPOSITIVO
+-- ============================================================================
+
+-- Configura replica identity full para receber payloads completos em updates e deletes
+ALTER TABLE public.estudantes REPLICA IDENTITY FULL;
+ALTER TABLE public.recibos_pagamentos REPLICA IDENTITY FULL;
+ALTER TABLE public.registo_notas REPLICA IDENTITY FULL;
+ALTER TABLE public.despesas_caixa REPLICA IDENTITY FULL;
+ALTER TABLE public.servicos_financeiros REPLICA IDENTITY FULL;
+ALTER TABLE public.turmas REPLICA IDENTITY FULL;
+ALTER TABLE public.professores REPLICA IDENTITY FULL;
+ALTER TABLE public.perfis_utilizadores REPLICA IDENTITY FULL;
+ALTER TABLE public.instituicoes REPLICA IDENTITY FULL;
+
+-- Adiciona as tabelas à publicação de broadcast realtime do Supabase
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE 
+            public.estudantes,
+            public.recibos_pagamentos,
+            public.registo_notas,
+            public.despesas_caixa,
+            public.servicos_financeiros,
+            public.turmas,
+            public.professores,
+            public.perfis_utilizadores,
+            public.instituicoes;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        NULL;
+END $$;
+

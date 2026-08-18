@@ -1,24 +1,30 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Teacher } from '../types';
 
+export const mapDatabaseTeacher = (t: any): Teacher => ({
+  id: t.id,
+  name: t.name,
+  biNumber: t.bi_number,
+  academicDegree: t.academic_degree,
+  specialty: t.specialty,
+  phone: t.phone,
+  email: t.email,
+  category: t.category,
+  status: t.status,
+  joinDate: t.join_date,
+});
+
 export const teachersService = {
   async getTeachers(): Promise<Teacher[] | null> {
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('professores').select('*');
-        if (!error && data && data.length > 0) {
-          return data.map(t => ({
-            id: t.id,
-            name: t.name,
-            biNumber: t.bi_number,
-            academicDegree: t.academic_degree,
-            specialty: t.specialty,
-            phone: t.phone,
-            email: t.email,
-            category: t.category,
-            status: t.status,
-            joinDate: t.join_date,
-          }));
+        if (error) {
+          console.warn('Erro ao carregar professores do Supabase:', error.message);
+          return null;
+        }
+        if (data) {
+          return data.map(mapDatabaseTeacher);
         }
       } catch (err) {
         console.warn('Erro ao carregar professores do Supabase:', err);
@@ -52,3 +58,4 @@ export const teachersService = {
     return true;
   }
 };
+

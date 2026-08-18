@@ -2,24 +2,30 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { GradeRecord, ExamGradeRecord, AssessmentSchedule } from '../types';
 import { calculateMT } from '../utils/formatters';
 
+export const mapDatabaseGrade = (g: any): GradeRecord => ({
+  id: g.id,
+  studentId: g.estudante_id,
+  assignmentId: g.atribuicao_id,
+  trimester: g.trimestre,
+  mac: Number(g.mac),
+  npt: Number(g.npt),
+  mt: Number(g.mt) || calculateMT(Number(g.mac), Number(g.npt)),
+  observations: g.observacoes,
+  updatedAt: g.updated_at,
+  updatedBy: g.updated_by,
+});
+
 export const gradesService = {
   async getGrades(): Promise<GradeRecord[] | null> {
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('registo_notas').select('*');
-        if (!error && data && data.length > 0) {
-          return data.map(g => ({
-            id: g.id,
-            studentId: g.estudante_id,
-            assignmentId: g.atribuicao_id,
-            trimester: g.trimestre,
-            mac: Number(g.mac),
-            npt: Number(g.npt),
-            mt: Number(g.mt) || calculateMT(Number(g.mac), Number(g.npt)),
-            observations: g.observacoes,
-            updatedAt: g.updated_at,
-            updatedBy: g.updated_by,
-          }));
+        if (error) {
+          console.warn('Erro ao carregar notas do Supabase:', error.message);
+          return null;
+        }
+        if (data) {
+          return data.map(mapDatabaseGrade);
         }
       } catch (err) {
         console.warn('Erro ao carregar notas do Supabase:', err);
@@ -61,7 +67,11 @@ export const gradesService = {
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('agendamento_avaliacoes').select('*');
-        if (!error && data && data.length > 0) {
+        if (error) {
+          console.warn('Erro ao buscar agendamentos de avaliação:', error.message);
+          return null;
+        }
+        if (data) {
           return data.map(a => ({
             id: a.id,
             assignmentId: a.atribuicao_id,
@@ -94,3 +104,4 @@ export const gradesService = {
     }
   }
 };
+

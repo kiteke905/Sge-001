@@ -1,6 +1,24 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { User, UserRole } from '../types';
 
+export const mapDatabaseUser = (u: any): User => ({
+  id: u.id,
+  name: u.nome,
+  username: u.username,
+  email: u.email,
+  role: u.role as UserRole,
+  avatar: u.avatar || '',
+  biNumber: u.bi_number,
+  academicDegree: u.grau_academico,
+  teacherId: u.teacher_id,
+  phone: u.telefone,
+  status: u.status,
+  documents: u.documentos || {},
+  createdAt: u.created_at,
+  lastLogin: u.ultimo_acesso,
+  password: '••••••••',
+});
+
 export const usersService = {
   async getUsers(): Promise<User[] | null> {
     if (isSupabaseConfigured()) {
@@ -10,25 +28,13 @@ export const usersService = {
           .select('*')
           .order('created_at', { ascending: true });
 
-        if (!error && data && data.length > 0) {
-          return data.map(u => ({
-            id: u.id,
-            name: u.nome,
-            username: u.username,
-            email: u.email,
-            role: u.role as UserRole,
-            avatar: u.avatar || '',
-            biNumber: u.bi_number,
-            academicDegree: u.grau_academico,
-            teacherId: u.teacher_id,
-            phone: u.telefone,
-            status: u.status,
-            documents: u.documentos || {},
-            createdAt: u.created_at,
-            lastLogin: u.ultimo_acesso,
-            // When retrieved from backend, password remains protected
-            password: '••••••••',
-          }));
+        if (error) {
+          console.warn('Erro ao carregar utilizadores do Supabase:', error.message);
+          return null;
+        }
+
+        if (data) {
+          return data.map(mapDatabaseUser);
         }
       } catch (err) {
         console.warn('Erro ao carregar utilizadores do Supabase:', err);

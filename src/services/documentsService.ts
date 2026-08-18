@@ -10,7 +10,12 @@ export const documentsService = {
           .select('*')
           .order('requested_at', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          console.warn('Erro ao carregar requerimentos do Supabase:', error.message);
+          return null;
+        }
+
+        if (data) {
           return data.map(r => ({
             id: r.id,
             requestNumber: r.request_number,

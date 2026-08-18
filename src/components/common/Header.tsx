@@ -5,7 +5,7 @@ import {
   Shield, UserCheck, GraduationCap, Users, 
   FileText, DollarSign, Building2, Calendar, 
   RotateCcw, AlertTriangle, 
-  Settings, Sparkles, Menu, X 
+  Settings, Sparkles, Menu, X, RefreshCw, Cloud, CloudOff, CheckCircle2
 } from 'lucide-react';
 import { UserProfileModal } from '../profile/UserProfileModal';
 
@@ -27,11 +27,26 @@ export const Header: React.FC<HeaderProps> = ({
     institution, 
     activeAcademicYear, 
     isGestorReadOnly, 
-    resetToDefaultData 
+    resetToDefaultData,
+    isSyncing,
+    syncStatus,
+    lastSyncTime,
+    syncWithServer
   } = useSchool();
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    const res = await syncWithServer(false);
+    if (res.success) {
+      setSyncToast('Sincronizado com Sucesso!');
+    } else {
+      setSyncToast(res.error || 'Erro ao sincronizar.');
+    }
+    setTimeout(() => setSyncToast(null), 3000);
+  };
 
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
@@ -143,6 +158,41 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right: Action Controls & User Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {/* Multi-Device Live Sync Status Indicator & Button */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                id="btn-sync-supabase"
+                title={
+                  syncStatus === 'ONLINE'
+                    ? `Sincronizado com Supabase (Última: ${lastSyncTime ? lastSyncTime.toLocaleTimeString() : 'agora'})`
+                    : syncStatus === 'SYNCING'
+                    ? 'A sincronizar dados com o Supabase...'
+                    : 'Modo Offline (Dados no LocalStorage)'
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+                  syncStatus === 'ONLINE'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : syncStatus === 'SYNCING'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : syncStatus === 'ONLINE' ? 'text-emerald-600' : 'text-slate-500'}`} />
+                <span className="hidden sm:inline">
+                  {syncStatus === 'ONLINE' ? 'Sincronizado' : syncStatus === 'SYNCING' ? 'A Sincronizar...' : 'Offline'}
+                </span>
+              </button>
+
+              {syncToast && (
+                <div className="hidden lg:flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 animate-in fade-in slide-in-from-top-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>{syncToast}</span>
+                </div>
+              )}
+            </div>
+
             {/* Reset Demo Data Button */}
             <button
               onClick={() => setShowResetConfirm(true)}

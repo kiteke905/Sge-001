@@ -18,15 +18,16 @@ import { isEnrollmentRequirementsFulfilled } from '../utils/academicUtils';
 
 // Services Layer (Supabase PostgreSQL + Persistent Offline Layer)
 import { institutionService } from '../services/institutionService';
-import { academicService } from '../services/academicService';
-import { studentsService } from '../services/studentsService';
-import { teachersService } from '../services/teachersService';
-import { gradesService } from '../services/gradesService';
-import { paymentsService } from '../services/paymentsService';
+import { academicService, mapDatabaseTurma, mapDatabaseAcademicYear } from '../services/academicService';
+import { studentsService, mapDatabaseStudent } from '../services/studentsService';
+import { teachersService, mapDatabaseTeacher } from '../services/teachersService';
+import { gradesService, mapDatabaseGrade } from '../services/gradesService';
+import { paymentsService, mapDatabaseReceipt, mapDatabaseExpense, mapDatabaseFinancialService } from '../services/paymentsService';
 import { documentsService } from '../services/documentsService';
-import { usersService } from '../services/usersService';
+import { usersService, mapDatabaseUser } from '../services/usersService';
 import { auditService } from '../services/auditService';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
 
 
 export const INSTITUTION_INFO: InstitutionInfo = {
@@ -146,6 +147,12 @@ interface SchoolContextType {
   auditLogs: AuditLog[];
   addAuditLog: (module: AuditLog['module'], action: string, details: string) => void;
   
+  // Synchronization & Multi-device status
+  isSyncing: boolean;
+  lastSyncTime: Date | null;
+  syncStatus: 'ONLINE' | 'OFFLINE' | 'SYNCING' | 'ERROR';
+  syncWithServer: (silent?: boolean) => Promise<{ success: boolean; count?: number; error?: string }>;
+
   // RBAC Permission check helpers
   canEnrollStudent: boolean;
   canProcessPayments: boolean;
@@ -190,9 +197,107 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [assessmentSchedules, setAssessmentSchedules] = useState<AssessmentSchedule[]>(INITIAL_ASSESSMENT_SCHEDULES);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
 
-  // Load from Supabase and localStorage
+  // Synchronization status state
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'ONLINE' | 'OFFLINE' | 'SYNCING' | 'ERROR'>(
+    isSupabaseConfigured() ? 'ONLINE' : 'OFFLINE'
+  );
+
+  // Core Multi-Device Synchronization Function
+  const syncWithServer = useCallback(async (silent = false): Promise<{ success: boolean; count?: number; error?: string }> => {
+    if (!isSupabaseConfigured()) {
+      setSyncStatus('OFFLINE');
+      return { success: false, error: 'Supabase não configurado.' };
+    }
+
+    if (!silent) setIsSyncing(true);
+    setSyncStatus('SYNCING');
+
+    try {
+      const [
+        inst,
+        supaStudents,
+        supaGrades,
+        supaReceipts,
+        supaExpenses,
+        supaRequests,
+        supaServices,
+        supaTeachers,
+        supaTurmas,
+        supaYears,
+        supaLogs,
+        supaUsers
+      ] = await Promise.all([
+        institutionService.getInstitution(),
+        studentsService.getStudents(),
+        gradesService.getGrades(),
+        paymentsService.getReceipts(),
+        paymentsService.getExpenses(),
+        documentsService.getRequests(),
+        paymentsService.getFinancialServices(),
+        teachersService.getTeachers(),
+        academicService.getTurmas(),
+        academicService.getAcademicYears(),
+        auditService.getAuditLogs(),
+        usersService.getUsers()
+      ]);
+
+      let updatedCount = 0;
+
+      if (inst) {
+        setInstitution(inst);
+      }
+      if (supaStudents) {
+        setStudents(supaStudents);
+        updatedCount += supaStudents.length;
+      }
+      if (supaGrades) {
+        setGrades(supaGrades);
+      }
+      if (supaReceipts) {
+        setReceipts(supaReceipts);
+        updatedCount += supaReceipts.length;
+      }
+      if (supaExpenses) {
+        setExpenses(supaExpenses);
+      }
+      if (supaRequests) {
+        setRequests(supaRequests);
+      }
+      if (supaServices) {
+        setFinancialServices(supaServices);
+      }
+      if (supaTeachers) {
+        setTeachers(supaTeachers);
+      }
+      if (supaTurmas) {
+        setTurmas(supaTurmas);
+      }
+      if (supaYears) {
+        setAcademicYears(supaYears);
+      }
+      if (supaLogs) {
+        setAuditLogs(supaLogs);
+      }
+      if (supaUsers && supaUsers.length > 0) {
+        setUsers(supaUsers);
+      }
+
+      setLastSyncTime(new Date());
+      setSyncStatus('ONLINE');
+      setIsSyncing(false);
+      return { success: true, count: updatedCount };
+    } catch (err: any) {
+      console.warn('Erro ao sincronizar com servidor Supabase:', err);
+      setSyncStatus('ERROR');
+      setIsSyncing(false);
+      return { success: false, error: err?.message || 'Falha de rede ao sincronizar' };
+    }
+  }, []);
+
+  // 1. Initial Load from LocalStorage + Trigger Server Sync
   useEffect(() => {
-    // 1. Instant load from local storage
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -225,53 +330,181 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('Error loading state from localStorage:', e);
     }
 
-    // 2. Asynchronous sync from Supabase PostgreSQL if configured
-    if (isSupabaseConfigured()) {
-      (async () => {
-        try {
-          const [
-            inst,
-            supaStudents,
-            supaGrades,
-            supaReceipts,
-            supaExpenses,
-            supaRequests,
-            supaServices,
-            supaTeachers,
-            supaTurmas,
-            supaYears,
-            supaLogs
-          ] = await Promise.all([
-            institutionService.getInstitution(),
-            studentsService.getStudents(),
-            gradesService.getGrades(),
-            paymentsService.getReceipts(),
-            paymentsService.getExpenses(),
-            documentsService.getRequests(),
-            paymentsService.getFinancialServices(),
-            teachersService.getTeachers(),
-            academicService.getTurmas(),
-            academicService.getAcademicYears(),
-            auditService.getAuditLogs(),
-          ]);
+    // Trigger initial sync with Supabase PostgreSQL
+    syncWithServer(true);
+  }, [syncWithServer]);
 
-          if (inst) setInstitution(inst);
-          if (supaStudents && supaStudents.length > 0) setStudents(supaStudents);
-          if (supaGrades && supaGrades.length > 0) setGrades(supaGrades);
-          if (supaReceipts && supaReceipts.length > 0) setReceipts(supaReceipts);
-          if (supaExpenses && supaExpenses.length > 0) setExpenses(supaExpenses);
-          if (supaRequests && supaRequests.length > 0) setRequests(supaRequests);
-          if (supaServices && supaServices.length > 0) setFinancialServices(supaServices);
-          if (supaTeachers && supaTeachers.length > 0) setTeachers(supaTeachers);
-          if (supaTurmas && supaTurmas.length > 0) setTurmas(supaTurmas);
-          if (supaYears && supaYears.length > 0) setAcademicYears(supaYears);
-          if (supaLogs && supaLogs.length > 0) setAuditLogs(supaLogs);
-        } catch (err) {
-          console.warn('Sincronização inicial do Supabase com aviso:', err);
+  // 2. Realtime Multi-Device Synchronization via Supabase WebSocket
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+
+    const channel = supabase
+      .channel('sige-multi-device-live-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'estudantes' },
+        (payload) => {
+          console.log('[Realtime] Estudantes alterados remotamente:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            const newSt = mapDatabaseStudent(payload.new);
+            setStudents(prev => {
+              if (prev.some(s => s.id === newSt.id)) {
+                return prev.map(s => s.id === newSt.id ? newSt : s);
+              }
+              return [newSt, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedSt = mapDatabaseStudent(payload.new);
+            setStudents(prev => prev.map(s => s.id === updatedSt.id ? updatedSt : s));
+          } else if (payload.eventType === 'DELETE') {
+            setStudents(prev => prev.filter(s => s.id !== (payload.old as any).id));
+          }
+          setLastSyncTime(new Date());
         }
-      })();
-    }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'recibos_pagamentos' },
+        (payload) => {
+          console.log('[Realtime] Recibos alterados remotamente:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            const newRec = mapDatabaseReceipt(payload.new);
+            setReceipts(prev => {
+              if (prev.some(r => r.id === newRec.id)) {
+                return prev.map(r => r.id === newRec.id ? newRec : r);
+              }
+              return [newRec, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRec = mapDatabaseReceipt(payload.new);
+            setReceipts(prev => prev.map(r => r.id === updatedRec.id ? updatedRec : r));
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'registo_notas' },
+        (payload) => {
+          console.log('[Realtime] Notas alteradas remotamente:', payload.eventType);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedGrade = mapDatabaseGrade(payload.new);
+            setGrades(prev => {
+              const idx = prev.findIndex(g => g.id === updatedGrade.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedGrade;
+                return copy;
+              }
+              return [updatedGrade, ...prev];
+            });
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'despesas_caixa' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newExp = mapDatabaseExpense(payload.new);
+            setExpenses(prev => [newExp, ...prev]);
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'servicos_financeiros' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedSrv = mapDatabaseFinancialService(payload.new);
+            setFinancialServices(prev => {
+              const idx = prev.findIndex(s => s.id === updatedSrv.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedSrv;
+                return copy;
+              }
+              return [updatedSrv, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setFinancialServices(prev => prev.filter(s => s.id !== (payload.old as any).id));
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'turmas' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedTurma = mapDatabaseTurma(payload.new);
+            setTurmas(prev => {
+              const idx = prev.findIndex(t => t.id === updatedTurma.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedTurma;
+                return copy;
+              }
+              return [updatedTurma, ...prev];
+            });
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'professores' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedTeacher = mapDatabaseTeacher(payload.new);
+            setTeachers(prev => {
+              const idx = prev.findIndex(t => t.id === updatedTeacher.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedTeacher;
+                return copy;
+              }
+              return [updatedTeacher, ...prev];
+            });
+          }
+          setLastSyncTime(new Date());
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Supabase Realtime] Conectado e escutando mutações multidispositivo.');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  // 3. Revalidation on window focus and online status
+  useEffect(() => {
+    const handleFocus = () => {
+      if (isSupabaseConfigured() && !isSyncing) {
+        syncWithServer(true);
+      }
+    };
+    const handleOnline = () => {
+      if (isSupabaseConfigured()) {
+        syncWithServer(false);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isSyncing, syncWithServer]);
+
 
   // Save to localStorage when state changes
   useEffect(() => {
@@ -360,8 +593,12 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setCurrentUser(updatedUser);
     setIsAuthenticated(true);
     addAuditLog('AUTENTICACAO', 'Início de Sessão', `Utilizador ${user.name} (${user.role}) iniciou sessão com sucesso.`);
+    
+    // Background sync on login
+    syncWithServer(true);
+
     return { success: true };
-  }, [users, addAuditLog]);
+  }, [users, addAuditLog, syncWithServer]);
 
   // Auth: Logout
   const logout = useCallback(() => {
@@ -1003,6 +1240,10 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addExamSchedule,
         auditLogs,
         addAuditLog,
+        isSyncing,
+        lastSyncTime,
+        syncStatus,
+        syncWithServer,
         canEnrollStudent,
         canProcessPayments,
         canRegisterTeacher,

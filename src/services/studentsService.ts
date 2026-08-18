@@ -1,6 +1,41 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Student } from '../types';
 
+export const mapDatabaseStudent = (s: any): Student => ({
+  id: s.id,
+  fullName: s.full_name,
+  biNumber: s.bi_number,
+  birthDate: s.birth_date,
+  gender: s.gender,
+  naturality: s.naturality,
+  province: s.province,
+  address: s.address,
+  phone: s.phone,
+  email: s.email,
+  photoUrl: s.photo_url || '',
+  guardianName: s.guardian_name,
+  guardianPhone: s.guardian_phone,
+  guardianKinship: s.guardian_kinship,
+  guardianProfession: s.guardian_profession,
+  academicYearId: s.ano_letivo_id,
+  courseId: s.curso_id,
+  classId: s.classe_id,
+  turmaId: s.turma_id,
+  turmaName: s.turma_name,
+  courseName: s.course_name,
+  shift: s.shift,
+  studentNumber: s.student_number,
+  enrollmentDate: s.enrollment_date,
+  status: s.status,
+  documentsSubmitted: s.documents_submitted || {
+    biCopy: false,
+    passPhoto: false,
+    previousCertificate: false,
+    medicalAttestation: false,
+    militaryDeclaration: false,
+  },
+});
+
 export const studentsService = {
   async getStudents(): Promise<Student[] | null> {
     if (isSupabaseConfigured()) {
@@ -10,41 +45,13 @@ export const studentsService = {
           .select('*')
           .order('student_number', { ascending: true });
 
-        if (!error && data && data.length > 0) {
-          return data.map(s => ({
-            id: s.id,
-            fullName: s.full_name,
-            biNumber: s.bi_number,
-            birthDate: s.birth_date,
-            gender: s.gender,
-            naturality: s.naturality,
-            province: s.province,
-            address: s.address,
-            phone: s.phone,
-            email: s.email,
-            photoUrl: s.photo_url || '',
-            guardianName: s.guardian_name,
-            guardianPhone: s.guardian_phone,
-            guardianKinship: s.guardian_kinship,
-            guardianProfession: s.guardian_profession,
-            academicYearId: s.ano_letivo_id,
-            courseId: s.curso_id,
-            classId: s.classe_id,
-            turmaId: s.turma_id,
-            turmaName: s.turma_name,
-            courseName: s.course_name,
-            shift: s.shift,
-            studentNumber: s.student_number,
-            enrollmentDate: s.enrollment_date,
-            status: s.status,
-            documentsSubmitted: s.documents_submitted || {
-              biCopy: false,
-              passPhoto: false,
-              previousCertificate: false,
-              medicalAttestation: false,
-              militaryDeclaration: false,
-            },
-          }));
+        if (error) {
+          console.warn('Erro ao obter estudantes do Supabase:', error.message);
+          return null;
+        }
+
+        if (data) {
+          return data.map(mapDatabaseStudent);
         }
       } catch (err) {
         console.warn('Erro ao obter estudantes do Supabase:', err);
@@ -103,6 +110,27 @@ export const studentsService = {
     return true;
   },
 
+  async deleteStudent(id: string): Promise<boolean> {
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase
+          .from('estudantes')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          console.warn('Erro ao excluir estudante no Supabase:', error.message);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('Exceção ao excluir estudante no Supabase:', err);
+        return false;
+      }
+    }
+    return true;
+  },
+
   async recordStudentHistory(history: {
     studentId: string;
     academicYearId: string;
@@ -129,3 +157,4 @@ export const studentsService = {
     }
   }
 };
+

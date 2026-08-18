@@ -1,34 +1,74 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { FinancialService, PaymentReceipt, ExpenseRecord } from '../types';
 
+export const mapDatabaseReceipt = (r: any): PaymentReceipt => ({
+  id: r.id,
+  receiptNumber: r.receipt_number,
+  studentId: r.student_id,
+  studentName: r.student_name,
+  studentBi: r.student_bi,
+  turmaName: r.turma_name,
+  courseName: r.course_name,
+  items: r.items || [],
+  subtotal: Number(r.subtotal),
+  totalLateFee: Number(r.total_late_fee),
+  totalPaid: Number(r.total_paid),
+  paymentMethod: r.payment_method,
+  bankReference: r.bank_reference,
+  cashierUserId: r.cashier_user_id,
+  cashierName: r.cashier_name,
+  issuedAt: r.issued_at,
+  hashVerification: r.hash_verification,
+  status: r.status,
+});
+
+export const mapDatabaseExpense = (e: any): ExpenseRecord => ({
+  id: e.id,
+  description: e.description,
+  category: e.category,
+  amount: Number(e.amount),
+  date: e.date,
+  paymentMethod: e.payment_method,
+  recipient: e.recipient,
+  receiptReference: e.receipt_reference,
+  notes: e.notes,
+  registeredBy: e.registered_by,
+});
+
+export const mapDatabaseFinancialService = (s: any): FinancialService => ({
+  id: s.id,
+  code: s.code,
+  name: s.name,
+  serviceType: s.service_type,
+  category: s.category,
+  basePrice: Number(s.base_price),
+  description: s.description,
+  isMonthly: s.is_monthly,
+  targetAudience: s.target_audience,
+  targetCourseId: s.target_course_id,
+  targetClassId: s.target_class_id,
+  fineEnabled: s.fine_enabled,
+  finePercentage: Number(s.fine_percentage || 0),
+  fineFixedAmount: Number(s.fine_fixed_amount || 0),
+  fineDueDay: s.fine_due_day || 10,
+  fineDescription: s.fine_description,
+  status: s.status,
+  createdAt: s.created_at,
+  updatedAt: s.updated_at,
+});
+
 export const paymentsService = {
   // Financial Services Catalog
   async getFinancialServices(): Promise<FinancialService[] | null> {
     if (isSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('servicos_financeiros').select('*');
-        if (!error && data && data.length > 0) {
-          return data.map(s => ({
-            id: s.id,
-            code: s.code,
-            name: s.name,
-            serviceType: s.service_type,
-            category: s.category,
-            basePrice: Number(s.base_price),
-            description: s.description,
-            isMonthly: s.is_monthly,
-            targetAudience: s.target_audience,
-            targetCourseId: s.target_course_id,
-            targetClassId: s.target_class_id,
-            fineEnabled: s.fine_enabled,
-            finePercentage: Number(s.fine_percentage || 0),
-            fineFixedAmount: Number(s.fine_fixed_amount || 0),
-            fineDueDay: s.fine_due_day || 10,
-            fineDescription: s.fine_description,
-            status: s.status,
-            createdAt: s.created_at,
-            updatedAt: s.updated_at,
-          }));
+        if (error) {
+          console.warn('Erro ao carregar serviços financeiros:', error.message);
+          return null;
+        }
+        if (data) {
+          return data.map(mapDatabaseFinancialService);
         }
       } catch (err) {
         console.warn('Erro ao carregar serviços financeiros:', err);
@@ -88,27 +128,13 @@ export const paymentsService = {
           .select('*')
           .order('issued_at', { ascending: false });
 
-        if (!error && data && data.length > 0) {
-          return data.map(r => ({
-            id: r.id,
-            receiptNumber: r.receipt_number,
-            studentId: r.student_id,
-            studentName: r.student_name,
-            studentBi: r.student_bi,
-            turmaName: r.turma_name,
-            courseName: r.course_name,
-            items: r.items || [],
-            subtotal: Number(r.subtotal),
-            totalLateFee: Number(r.total_late_fee),
-            totalPaid: Number(r.total_paid),
-            paymentMethod: r.payment_method,
-            bankReference: r.bank_reference,
-            cashierUserId: r.cashier_user_id,
-            cashierName: r.cashier_name,
-            issuedAt: r.issued_at,
-            hashVerification: r.hash_verification,
-            status: r.status,
-          }));
+        if (error) {
+          console.warn('Erro ao carregar recibos do Supabase:', error.message);
+          return null;
+        }
+
+        if (data) {
+          return data.map(mapDatabaseReceipt);
         }
       } catch (err) {
         console.warn('Erro ao carregar recibos do Supabase:', err);
@@ -158,19 +184,13 @@ export const paymentsService = {
           .select('*')
           .order('date', { ascending: false });
 
-        if (!error && data && data.length > 0) {
-          return data.map(e => ({
-            id: e.id,
-            description: e.description,
-            category: e.category,
-            amount: Number(e.amount),
-            date: e.date,
-            paymentMethod: e.payment_method,
-            recipient: e.recipient,
-            receiptReference: e.receipt_reference,
-            notes: e.notes,
-            registeredBy: e.registered_by,
-          }));
+        if (error) {
+          console.warn('Erro ao obter despesas do Supabase:', error.message);
+          return null;
+        }
+
+        if (data) {
+          return data.map(mapDatabaseExpense);
         }
       } catch (err) {
         console.warn('Erro ao obter despesas do Supabase:', err);
@@ -203,3 +223,4 @@ export const paymentsService = {
     return true;
   }
 };
+
