@@ -5,10 +5,11 @@ import {
   Building2, Save, ShieldCheck, CheckCircle2, 
   MapPin, Phone, Mail, Award, AlertTriangle, 
   Upload, Camera, Image, FileText, Sparkles, RefreshCw,
-  Database, Download, HardDrive, FileSpreadsheet, Check, ArrowDownToLine
+  Database, Download, HardDrive, FileSpreadsheet, Check, ArrowDownToLine,
+  Activity, Server, Wifi, AlertCircle, CheckCircle, Terminal, HelpCircle
 } from 'lucide-react';
 import { backupService } from '../../services/backupService';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { isSupabaseConfigured, testSupabaseConnection, SupabaseTestResult } from '../../lib/supabase';
 
 export const InstitutionSettings: React.FC = () => {
   const { 
@@ -21,7 +22,21 @@ export const InstitutionSettings: React.FC = () => {
   const [formData, setFormData] = useState<InstitutionInfo>({ ...institution });
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<SupabaseTestResult | null>(null);
+  const [isTesting, setIsTesting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTestSupabase = async () => {
+    setIsTesting(true);
+    try {
+      const result = await testSupabaseConnection();
+      setTestResult(result);
+    } catch (err: any) {
+      console.error('Erro ao testar Supabase:', err);
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   // If user is not admin, they should not even see this module
   if (!isAdmin) {
@@ -454,6 +469,120 @@ export const InstitutionSettings: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Supabase Connection Diagnostics & Live Test */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Server className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                Diagnóstico de Conexão Supabase / PostgreSQL
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  isSupabaseConfigured() 
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}>
+                  {isSupabaseConfigured() ? '● VITE_SUPABASE_URL Configurada' : '○ Variáveis de Ambiente Pendentes'}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Verificação em tempo real da acessibilidade da API do Supabase, autenticação da chave pública (ANON) e existência das tabelas no schema public.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestSupabase}
+              disabled={isTesting}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors disabled:opacity-50"
+            >
+              <Activity className={`w-4 h-4 text-emerald-400 ${isTesting ? 'animate-spin' : ''}`} />
+              {isTesting ? 'A Testar Conexão...' : 'Testar Conexão Supabase'}
+            </button>
+          </div>
+        </div>
+
+        {/* Informações de Variáveis & Console */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-2 text-slate-700">
+            <Wifi className="w-4 h-4 text-slate-500 shrink-0" />
+            <span><strong>VITE_SUPABASE_URL:</strong> {isSupabaseConfigured() ? 'Definida e Ativa' : 'Não configurada (.env)'}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-700">
+            <Terminal className="w-4 h-4 text-slate-500 shrink-0" />
+            <span><strong>Teste via Console:</strong> Digite <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono text-[11px]">__testSupabaseConnection()</code> no DevTools</span>
+          </div>
+        </div>
+
+        {/* Resultado do Teste de Diagnóstico */}
+        {testResult && (
+          <div className={`p-4 rounded-xl border space-y-4 ${
+            testResult.status === 'CONNECTED' 
+              ? 'bg-emerald-50/70 border-emerald-200' 
+              : testResult.status === 'TABLES_MISSING' 
+                ? 'bg-amber-50/70 border-amber-200' 
+                : 'bg-rose-50/70 border-rose-200'
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                {testResult.status === 'CONNECTED' ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                ) : testResult.status === 'TABLES_MISSING' ? (
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                )}
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">
+                    {testResult.status === 'CONNECTED' && 'Conexão Estabelecida com Sucesso!'}
+                    {testResult.status === 'TABLES_MISSING' && 'Conexão Estabelecida — Tabelas Pendentes de Migração'}
+                    {testResult.status === 'NOT_CONFIGURED' && 'Supabase Não Configurado'}
+                    {testResult.status === 'NETWORK_ERROR' && 'Falha de Comunicação com o Servidor'}
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">{testResult.message}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 shadow-2xs">
+                  Latência: {testResult.latencyMs} ms
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {testResult.timestamp}
+                </span>
+              </div>
+            </div>
+
+            {/* Checklist de Tabelas */}
+            {testResult.tables.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">
+                  Estado das Tabelas no Schema Public ({testResult.tables.filter(t => t.exists).length}/{testResult.tables.length} Criadas):
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  {testResult.tables.map((t) => (
+                    <div 
+                      key={t.tableName}
+                      className={`p-2 rounded-lg border text-[11px] flex items-center justify-between ${
+                        t.exists 
+                          ? 'bg-white border-emerald-200 text-emerald-900' 
+                          : 'bg-white/80 border-slate-200 text-slate-500'
+                      }`}
+                    >
+                      <span className="font-mono font-medium truncate">{t.tableName}</span>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${t.exists ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Database Persistence & Full Backup Management Section */}
