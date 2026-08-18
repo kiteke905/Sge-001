@@ -163,13 +163,13 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={handleManualSync}
                 disabled={isSyncing}
-                id="btn-sync-supabase"
+                id="btn-sync-cloud"
                 title={
                   syncStatus === 'ONLINE'
-                    ? `Sincronizado com Supabase (Última: ${lastSyncTime ? lastSyncTime.toLocaleTimeString() : 'agora'})`
+                    ? `Nuvem Ativa em Tempo Real (Última sincronização: ${lastSyncTime ? lastSyncTime.toLocaleTimeString() : 'agora'})`
                     : syncStatus === 'SYNCING'
-                    ? 'A sincronizar dados com o Supabase...'
-                    : 'Modo Offline (Dados no LocalStorage)'
+                    ? 'A sincronizar dados com a Nuvem...'
+                    : 'Modo Offline (Guardado localmente no dispositivo)'
                 }
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
                   syncStatus === 'ONLINE'
@@ -181,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : syncStatus === 'ONLINE' ? 'text-emerald-600' : 'text-slate-500'}`} />
                 <span className="hidden sm:inline">
-                  {syncStatus === 'ONLINE' ? 'Sincronizado' : syncStatus === 'SYNCING' ? 'A Sincronizar...' : 'Offline'}
+                  {syncStatus === 'ONLINE' ? 'Nuvem Conectada' : syncStatus === 'SYNCING' ? 'A Sincronizar...' : 'Offline'}
                 </span>
               </button>
 

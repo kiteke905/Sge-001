@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { 
   User, UserRole, AcademicYear, Course, SchoolClass, Turma, 
   Teacher, Subject, CurricularAssignment, Student, GradeRecord, AssessmentSchedule,
@@ -16,7 +16,7 @@ import {
 import { generateVerificationHash, calculateMT } from '../utils/formatters';
 import { isEnrollmentRequirementsFulfilled } from '../utils/academicUtils';
 
-// Services Layer (Supabase PostgreSQL + Persistent Offline Layer)
+// Services Layer (Firebase Cloud + Supabase PostgreSQL + Persistent Offline Layer)
 import { institutionService } from '../services/institutionService';
 import { academicService, mapDatabaseTurma, mapDatabaseAcademicYear } from '../services/academicService';
 import { studentsService, mapDatabaseStudent } from '../services/studentsService';
@@ -27,6 +27,8 @@ import { documentsService } from '../services/documentsService';
 import { usersService, mapDatabaseUser } from '../services/usersService';
 import { auditService } from '../services/auditService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { cloudSyncService } from '../services/cloudSyncService';
+import { isFirebaseConfigured } from '../lib/firebase';
 
 
 
@@ -201,95 +203,175 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncStatus, setSyncStatus] = useState<'ONLINE' | 'OFFLINE' | 'SYNCING' | 'ERROR'>(
-    isSupabaseConfigured() ? 'ONLINE' : 'OFFLINE'
+    (isFirebaseConfigured() || isSupabaseConfigured()) ? 'ONLINE' : 'OFFLINE'
   );
+
+  // Stable reference to current local state for background synchronization without triggering re-render cascades
+  const latestStateRef = useRef({
+    students,
+    turmas,
+    teachers,
+    financialServices,
+    receipts,
+    grades,
+    institution,
+  });
+
+  useEffect(() => {
+    latestStateRef.current = {
+      students,
+      turmas,
+      teachers,
+      financialServices,
+      receipts,
+      grades,
+      institution,
+    };
+  }, [students, turmas, teachers, financialServices, receipts, grades, institution]);
 
   // Core Multi-Device Synchronization Function
   const syncWithServer = useCallback(async (silent = false): Promise<{ success: boolean; count?: number; error?: string }> => {
-    if (!isSupabaseConfigured()) {
-      setSyncStatus('OFFLINE');
-      return { success: false, error: 'Supabase não configurado.' };
-    }
-
     if (!silent) setIsSyncing(true);
     setSyncStatus('SYNCING');
 
     try {
-      const [
-        inst,
-        supaStudents,
-        supaGrades,
-        supaReceipts,
-        supaExpenses,
-        supaRequests,
-        supaServices,
-        supaTeachers,
-        supaTurmas,
-        supaYears,
-        supaLogs,
-        supaUsers
-      ] = await Promise.all([
-        institutionService.getInstitution(),
-        studentsService.getStudents(),
-        gradesService.getGrades(),
-        paymentsService.getReceipts(),
-        paymentsService.getExpenses(),
-        documentsService.getRequests(),
-        paymentsService.getFinancialServices(),
-        teachersService.getTeachers(),
-        academicService.getTurmas(),
-        academicService.getAcademicYears(),
-        auditService.getAuditLogs(),
-        usersService.getUsers()
-      ]);
-
       let updatedCount = 0;
 
-      if (inst) {
-        setInstitution(inst);
-      }
-      if (supaStudents) {
-        setStudents(supaStudents);
-        updatedCount += supaStudents.length;
-      }
-      if (supaGrades) {
-        setGrades(supaGrades);
-      }
-      if (supaReceipts) {
-        setReceipts(supaReceipts);
-        updatedCount += supaReceipts.length;
-      }
-      if (supaExpenses) {
-        setExpenses(supaExpenses);
-      }
-      if (supaRequests) {
-        setRequests(supaRequests);
-      }
-      if (supaServices) {
-        setFinancialServices(supaServices);
-      }
-      if (supaTeachers) {
-        setTeachers(supaTeachers);
-      }
-      if (supaTurmas) {
-        setTurmas(supaTurmas);
-      }
-      if (supaYears) {
-        setAcademicYears(supaYears);
-      }
-      if (supaLogs) {
-        setAuditLogs(supaLogs);
-      }
-      if (supaUsers && supaUsers.length > 0) {
-        setUsers(supaUsers);
+      // 1. Check if Firebase Cloud is configured (Preferred & Auto-Provisioned)
+      if (isFirebaseConfigured()) {
+        const [
+          fbStudents,
+          fbReceipts,
+          fbGrades,
+          fbServices,
+          fbTurmas,
+          fbTeachers,
+          fbExpenses,
+          fbRequests,
+          fbInst
+        ] = await Promise.all([
+          cloudSyncService.fetchCollection<Student>('estudantes'),
+          cloudSyncService.fetchCollection<PaymentReceipt>('recibos_pagamentos'),
+          cloudSyncService.fetchCollection<GradeRecord>('registo_notas'),
+          cloudSyncService.fetchCollection<FinancialService>('servicos_financeiros'),
+          cloudSyncService.fetchCollection<Turma>('turmas'),
+          cloudSyncService.fetchCollection<Teacher>('professores'),
+          cloudSyncService.fetchCollection<ExpenseRecord>('despesas_caixa'),
+          cloudSyncService.fetchCollection<DocumentRequest>('requerimentos_documentos'),
+          cloudSyncService.fetchCollection<InstitutionInfo>('instituicoes')
+        ]);
+
+        // If cloud database has data, load it
+        if (fbStudents && fbStudents.length > 0) {
+          setStudents(fbStudents);
+          updatedCount += fbStudents.length;
+        }
+        if (fbReceipts && fbReceipts.length > 0) {
+          setReceipts(fbReceipts);
+          updatedCount += fbReceipts.length;
+        }
+        if (fbGrades && fbGrades.length > 0) {
+          setGrades(fbGrades);
+        }
+        if (fbServices && fbServices.length > 0) {
+          setFinancialServices(fbServices);
+        }
+        if (fbTurmas && fbTurmas.length > 0) {
+          setTurmas(fbTurmas);
+        }
+        if (fbTeachers && fbTeachers.length > 0) {
+          setTeachers(fbTeachers);
+        }
+        if (fbExpenses && fbExpenses.length > 0) {
+          setExpenses(fbExpenses);
+        }
+        if (fbRequests && fbRequests.length > 0) {
+          setRequests(fbRequests);
+        }
+        if (fbInst && fbInst.length > 0) {
+          setInstitution(fbInst[0]);
+        }
+
+        // If Cloud was brand new / empty, automatically push current local seed data to cloud!
+        const cur = latestStateRef.current;
+        if ((!fbStudents || fbStudents.length === 0) && cur.students.length > 0) {
+          await cloudSyncService.pushInitialSeedToCloud({
+            institution: cur.institution,
+            estudantes: cur.students,
+            turmas: cur.turmas,
+            professores: cur.teachers,
+            servicos_financeiros: cur.financialServices,
+            recibos_pagamentos: cur.receipts,
+            registo_notas: cur.grades
+          });
+        }
+
+        setLastSyncTime(new Date());
+        setSyncStatus('ONLINE');
+        setIsSyncing(false);
+        return { success: true, count: updatedCount };
       }
 
-      setLastSyncTime(new Date());
+      // 2. Supabase Fallback if configured
+      if (isSupabaseConfigured()) {
+        const [
+          inst,
+          supaStudents,
+          supaGrades,
+          supaReceipts,
+          supaExpenses,
+          supaRequests,
+          supaServices,
+          supaTeachers,
+          supaTurmas,
+          supaYears,
+          supaLogs,
+          supaUsers
+        ] = await Promise.all([
+          institutionService.getInstitution(),
+          studentsService.getStudents(),
+          gradesService.getGrades(),
+          paymentsService.getReceipts(),
+          paymentsService.getExpenses(),
+          documentsService.getRequests(),
+          paymentsService.getFinancialServices(),
+          teachersService.getTeachers(),
+          academicService.getTurmas(),
+          academicService.getAcademicYears(),
+          auditService.getAuditLogs(),
+          usersService.getUsers()
+        ]);
+
+        if (inst) setInstitution(inst);
+        if (supaStudents) {
+          setStudents(supaStudents);
+          updatedCount += supaStudents.length;
+        }
+        if (supaGrades) setGrades(supaGrades);
+        if (supaReceipts) {
+          setReceipts(supaReceipts);
+          updatedCount += supaReceipts.length;
+        }
+        if (supaExpenses) setExpenses(supaExpenses);
+        if (supaRequests) setRequests(supaRequests);
+        if (supaServices) setFinancialServices(supaServices);
+        if (supaTeachers) setTeachers(supaTeachers);
+        if (supaTurmas) setTurmas(supaTurmas);
+        if (supaYears) setAcademicYears(supaYears);
+        if (supaLogs) setAuditLogs(supaLogs);
+        if (supaUsers && supaUsers.length > 0) setUsers(supaUsers);
+
+        setLastSyncTime(new Date());
+        setSyncStatus('ONLINE');
+        setIsSyncing(false);
+        return { success: true, count: updatedCount };
+      }
+
       setSyncStatus('ONLINE');
       setIsSyncing(false);
-      return { success: true, count: updatedCount };
+      return { success: true, count: 0 };
     } catch (err: any) {
-      console.warn('Erro ao sincronizar com servidor Supabase:', err);
+      console.warn('Erro ao sincronizar com servidor na nuvem:', err);
       setSyncStatus('ERROR');
       setIsSyncing(false);
       return { success: false, error: err?.message || 'Falha de rede ao sincronizar' };
@@ -330,168 +412,120 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('Error loading state from localStorage:', e);
     }
 
-    // Trigger initial sync with Supabase PostgreSQL
+    // Trigger initial sync with Cloud database
     syncWithServer(true);
-  }, [syncWithServer]);
+  }, []);
 
-  // 2. Realtime Multi-Device Synchronization via Supabase WebSocket
+  // 2. Realtime Multi-Device Synchronization via Firebase Firestore & Supabase
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    const unsubscribers: (() => void)[] = [];
 
-    const channel = supabase
-      .channel('sige-multi-device-live-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'estudantes' },
-        (payload) => {
-          console.log('[Realtime] Estudantes alterados remotamente:', payload.eventType);
-          if (payload.eventType === 'INSERT') {
-            const newSt = mapDatabaseStudent(payload.new);
-            setStudents(prev => {
-              if (prev.some(s => s.id === newSt.id)) {
-                return prev.map(s => s.id === newSt.id ? newSt : s);
-              }
-              return [newSt, ...prev];
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedSt = mapDatabaseStudent(payload.new);
-            setStudents(prev => prev.map(s => s.id === updatedSt.id ? updatedSt : s));
-          } else if (payload.eventType === 'DELETE') {
-            setStudents(prev => prev.filter(s => s.id !== (payload.old as any).id));
-          }
+    // A) Firebase Realtime Listeners (Instant live sync across tabs & computers)
+    if (isFirebaseConfigured()) {
+      const unsubStudents = cloudSyncService.subscribeToCollection<Student>('estudantes', (cloudStudents) => {
+        if (cloudStudents && cloudStudents.length > 0) {
+          setStudents(cloudStudents);
           setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'recibos_pagamentos' },
-        (payload) => {
-          console.log('[Realtime] Recibos alterados remotamente:', payload.eventType);
-          if (payload.eventType === 'INSERT') {
-            const newRec = mapDatabaseReceipt(payload.new);
-            setReceipts(prev => {
-              if (prev.some(r => r.id === newRec.id)) {
-                return prev.map(r => r.id === newRec.id ? newRec : r);
-              }
-              return [newRec, ...prev];
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedRec = mapDatabaseReceipt(payload.new);
-            setReceipts(prev => prev.map(r => r.id === updatedRec.id ? updatedRec : r));
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'registo_notas' },
-        (payload) => {
-          console.log('[Realtime] Notas alteradas remotamente:', payload.eventType);
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedGrade = mapDatabaseGrade(payload.new);
-            setGrades(prev => {
-              const idx = prev.findIndex(g => g.id === updatedGrade.id);
-              if (idx >= 0) {
-                const copy = [...prev];
-                copy[idx] = updatedGrade;
-                return copy;
-              }
-              return [updatedGrade, ...prev];
-            });
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'despesas_caixa' },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newExp = mapDatabaseExpense(payload.new);
-            setExpenses(prev => [newExp, ...prev]);
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'servicos_financeiros' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedSrv = mapDatabaseFinancialService(payload.new);
-            setFinancialServices(prev => {
-              const idx = prev.findIndex(s => s.id === updatedSrv.id);
-              if (idx >= 0) {
-                const copy = [...prev];
-                copy[idx] = updatedSrv;
-                return copy;
-              }
-              return [updatedSrv, ...prev];
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setFinancialServices(prev => prev.filter(s => s.id !== (payload.old as any).id));
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'turmas' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedTurma = mapDatabaseTurma(payload.new);
-            setTurmas(prev => {
-              const idx = prev.findIndex(t => t.id === updatedTurma.id);
-              if (idx >= 0) {
-                const copy = [...prev];
-                copy[idx] = updatedTurma;
-                return copy;
-              }
-              return [updatedTurma, ...prev];
-            });
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'professores' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedTeacher = mapDatabaseTeacher(payload.new);
-            setTeachers(prev => {
-              const idx = prev.findIndex(t => t.id === updatedTeacher.id);
-              if (idx >= 0) {
-                const copy = [...prev];
-                copy[idx] = updatedTeacher;
-                return copy;
-              }
-              return [updatedTeacher, ...prev];
-            });
-          }
-          setLastSyncTime(new Date());
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[Supabase Realtime] Conectado e escutando mutações multidispositivo.');
         }
       });
+      if (unsubStudents) unsubscribers.push(unsubStudents);
+
+      const unsubReceipts = cloudSyncService.subscribeToCollection<PaymentReceipt>('recibos_pagamentos', (cloudReceipts) => {
+        if (cloudReceipts && cloudReceipts.length > 0) {
+          setReceipts(cloudReceipts);
+          setLastSyncTime(new Date());
+        }
+      });
+      if (unsubReceipts) unsubscribers.push(unsubReceipts);
+
+      const unsubGrades = cloudSyncService.subscribeToCollection<GradeRecord>('registo_notas', (cloudGrades) => {
+        if (cloudGrades && cloudGrades.length > 0) {
+          setGrades(cloudGrades);
+          setLastSyncTime(new Date());
+        }
+      });
+      if (unsubGrades) unsubscribers.push(unsubGrades);
+
+      const unsubServices = cloudSyncService.subscribeToCollection<FinancialService>('servicos_financeiros', (cloudServices) => {
+        if (cloudServices && cloudServices.length > 0) {
+          setFinancialServices(cloudServices);
+          setLastSyncTime(new Date());
+        }
+      });
+      if (unsubServices) unsubscribers.push(unsubServices);
+
+      const unsubTurmas = cloudSyncService.subscribeToCollection<Turma>('turmas', (cloudTurmas) => {
+        if (cloudTurmas && cloudTurmas.length > 0) {
+          setTurmas(cloudTurmas);
+          setLastSyncTime(new Date());
+        }
+      });
+      if (unsubTurmas) unsubscribers.push(unsubTurmas);
+
+      const unsubTeachers = cloudSyncService.subscribeToCollection<Teacher>('professores', (cloudTeachers) => {
+        if (cloudTeachers && cloudTeachers.length > 0) {
+          setTeachers(cloudTeachers);
+          setLastSyncTime(new Date());
+        }
+      });
+      if (unsubTeachers) unsubscribers.push(unsubTeachers);
+    }
+
+    // B) Supabase Realtime Fallback (if Supabase is configured)
+    if (isSupabaseConfigured()) {
+      const channel = supabase
+        .channel('sige-multi-device-live-sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'estudantes' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              const newSt = mapDatabaseStudent(payload.new);
+              setStudents(prev => prev.some(s => s.id === newSt.id) ? prev.map(s => s.id === newSt.id ? newSt : s) : [newSt, ...prev]);
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedSt = mapDatabaseStudent(payload.new);
+              setStudents(prev => prev.map(s => s.id === updatedSt.id ? updatedSt : s));
+            } else if (payload.eventType === 'DELETE') {
+              setStudents(prev => prev.filter(s => s.id !== (payload.old as any).id));
+            }
+            setLastSyncTime(new Date());
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'recibos_pagamentos' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              const newRec = mapDatabaseReceipt(payload.new);
+              setReceipts(prev => prev.some(r => r.id === newRec.id) ? prev.map(r => r.id === newRec.id ? newRec : r) : [newRec, ...prev]);
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedRec = mapDatabaseReceipt(payload.new);
+              setReceipts(prev => prev.map(r => r.id === updatedRec.id ? updatedRec : r));
+            }
+            setLastSyncTime(new Date());
+          }
+        )
+        .subscribe();
+
+      unsubscribers.push(() => {
+        supabase.removeChannel(channel);
+      });
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribers.forEach(u => u());
     };
   }, []);
 
   // 3. Revalidation on window focus and online status
   useEffect(() => {
     const handleFocus = () => {
-      if (isSupabaseConfigured() && !isSyncing) {
+      if ((isFirebaseConfigured() || isSupabaseConfigured()) && !isSyncing) {
         syncWithServer(true);
       }
     };
     const handleOnline = () => {
-      if (isSupabaseConfigured()) {
+      if (isFirebaseConfigured() || isSupabaseConfigured()) {
         syncWithServer(false);
       }
     };

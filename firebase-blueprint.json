@@ -1,0 +1,170 @@
+{
+  "entities": {
+    "Instituicao": {
+      "title": "Instituição Escolar",
+      "description": "Dados da instituição de ensino em Angola",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subTitle": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "republicHeader": { "type": "string" },
+        "ministryHeader": { "type": "string" },
+        "provincialHeader": { "type": "string" },
+        "nif": { "type": "string" },
+        "decreeNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "province": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "directorGeneral": { "type": "string" },
+        "directorPedagogico": { "type": "string" },
+        "chiefSecretaria": { "type": "string" },
+        "currency": { "type": "string" }
+      },
+      "required": ["name", "nif", "address", "phone", "email"]
+    },
+    "Estudante": {
+      "title": "Estudante",
+      "description": "Registo de aluno matriculado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "biNumber": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "gender": { "type": "string", "enum": ["M", "F"] },
+        "naturality": { "type": "string" },
+        "province": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "guardianName": { "type": "string" },
+        "guardianPhone": { "type": "string" },
+        "guardianKinship": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "classId": { "type": "string" },
+        "turmaId": { "type": "string" },
+        "shift": { "type": "string" },
+        "studentNumber": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "fullName", "biNumber", "birthDate", "gender", "guardianName", "guardianPhone", "turmaId", "status"]
+    },
+    "Turma": {
+      "title": "Turma",
+      "description": "Turma letiva",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "classId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "shift": { "type": "string" },
+        "room": { "type": "string" },
+        "maxCapacity": { "type": "number" }
+      },
+      "required": ["id", "name", "academicYearId", "classId", "courseId", "shift", "room"]
+    },
+    "Professor": {
+      "title": "Professor",
+      "description": "Docente titular",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "biNumber": { "type": "string" },
+        "academicDegree": { "type": "string" },
+        "specialty": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name", "biNumber", "academicDegree", "specialty", "phone", "email"]
+    },
+    "Nota": {
+      "title": "Registo de Nota",
+      "description": "Nota trimestral do aluno (Fórmula MED)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "assignmentId": { "type": "string" },
+        "trimester": { "type": "number" },
+        "mac": { "type": "number" },
+        "npt": { "type": "number" },
+        "mt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "studentId", "assignmentId", "trimester", "mac", "npt", "mt"]
+    },
+    "Recibo": {
+      "title": "Recibo de Pagamento",
+      "description": "Recibo financeiro de propinas ou taxas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "totalLateFee": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "hashVerification": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "receiptNumber", "studentId", "studentName", "totalPaid", "paymentMethod", "hashVerification"]
+    },
+    "ServicoFinanceiro": {
+      "title": "Serviço Financeiro",
+      "description": "Tabela de propinas e taxas escolares",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "basePrice": { "type": "number" },
+        "isMonthly": { "type": "boolean" },
+        "fineEnabled": { "type": "boolean" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "code", "name", "basePrice"]
+    }
+  },
+  "firestore": {
+    "/instituicoes/{id}": {
+      "schema": "Instituicao",
+      "description": "Identidade e dados oficiais da instituição"
+    },
+    "/estudantes/{id}": {
+      "schema": "Estudante",
+      "description": "Alunos matriculados no SIGE"
+    },
+    "/turmas/{id}": {
+      "schema": "Turma",
+      "description": "Turmas ativas e históricas"
+    },
+    "/professores/{id}": {
+      "schema": "Professor",
+      "description": "Corpo docente"
+    },
+    "/registo_notas/{id}": {
+      "schema": "Nota",
+      "description": "Avaliações trimestrais e minipautas"
+    },
+    "/recibos_pagamentos/{id}": {
+      "schema": "Recibo",
+      "description": "Tesouraria e recibos emitidos"
+    },
+    "/servicos_financeiros/{id}": {
+      "schema": "ServicoFinanceiro",
+      "description": "Catálogo de propinas e emolumentos"
+    }
+  }
+}

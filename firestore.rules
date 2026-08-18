@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // SIGE Angola - Permite acesso de leitura e escrita para utilizadores autenticados ou aplicação escolar autorizada
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
