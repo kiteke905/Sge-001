@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS public.cursos (
 CREATE TABLE IF NOT EXISTS public.classes (
     id VARCHAR(50) PRIMARY KEY,
     nome VARCHAR(100) NOT NULL, -- ex: "10ª Classe"
-    nivel SMALLINT NOT NULL CHECK (nivel BETWEEN 1 AND 13),
+    nivel SMALLINT NOT NULL CHECK (nivel BETWEEN 0 AND 13),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
