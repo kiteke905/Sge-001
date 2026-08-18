@@ -1,18 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useSchool } from '../../context/SchoolContext';
 import { InstitutionInfo } from '../../types';
 import { 
   Building2, Save, ShieldCheck, CheckCircle2, 
   MapPin, Phone, Mail, Award, AlertTriangle, 
-  Upload, Camera, Image, FileText, Sparkles, RefreshCw 
+  Upload, Camera, Image, FileText, Sparkles, RefreshCw,
+  Database, Download, HardDrive, FileSpreadsheet, Check, ArrowDownToLine
 } from 'lucide-react';
+import { backupService } from '../../services/backupService';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 export const InstitutionSettings: React.FC = () => {
-  const { institution, updateInstitution, currentUser } = useSchool();
+  const { 
+    institution, updateInstitution, currentUser,
+    students, receipts, grades, expenses, teachers, turmas,
+    academicYears, financialServices, users, auditLogs, requests, timetable
+  } = useSchool();
   const isAdmin = currentUser.role === 'ADMIN';
 
   const [formData, setFormData] = useState<InstitutionInfo>({ ...institution });
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // If user is not admin, they should not even see this module
   if (!isAdmin) {
@@ -443,6 +452,128 @@ export const InstitutionSettings: React.FC = () => {
                 Este timbre é automaticamente renderizado em todos os PDFs gerados pelo sistema.
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Persistence & Full Backup Management Section */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                Gestão da Base de Dados & Cópias de Segurança (Backup)
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                  {isSupabaseConfigured() ? '● PostgreSQL Supabase Ativo' : '● Armazenamento Local Persistente'}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Exportação de dados em massa, cópias de segurança integrais em formato JSON e exportações tabulares em CSV para auditoria externa.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              backupService.exportFullBackup({
+                institution,
+                academicYears,
+                financialServices,
+                turmas,
+                teachers,
+                students,
+                grades,
+                receipts,
+                expenses,
+                requests,
+                timetable,
+                users,
+                auditLogs,
+              });
+              setRestoreMsg('Backup completo descarregado com sucesso!');
+              setTimeout(() => setRestoreMsg(null), 4000);
+            }}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Download Backup Geral (JSON)
+          </button>
+        </div>
+
+        {restoreMsg && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs text-emerald-800 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{restoreMsg}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Estudantes</span>
+              <span className="text-xs font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{students.length}</span>
+            </div>
+            <p className="text-[11px] text-slate-500">Dados cadastrais, matrículas e turmas</p>
+            <button
+              type="button"
+              onClick={() => backupService.exportTableToCSV('estudantes-sige', students)}
+              className="w-full mt-1 py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Exportar CSV
+            </button>
+          </div>
+
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Recibos & Caixa</span>
+              <span className="text-xs font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{receipts.length}</span>
+            </div>
+            <p className="text-[11px] text-slate-500">Histórico de liquidações e faturas</p>
+            <button
+              type="button"
+              onClick={() => backupService.exportTableToCSV('recibos-pagamentos-sige', receipts)}
+              className="w-full mt-1 py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Exportar CSV
+            </button>
+          </div>
+
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Notas & Minipautas</span>
+              <span className="text-xs font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{grades.length}</span>
+            </div>
+            <p className="text-[11px] text-slate-500">Avaliações trimestrais (MAC, NPT, MT)</p>
+            <button
+              type="button"
+              onClick={() => backupService.exportTableToCSV('notas-minipautas-sige', grades)}
+              className="w-full mt-1 py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Exportar CSV
+            </button>
+          </div>
+
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Despesas & Gastos</span>
+              <span className="text-xs font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{expenses.length}</span>
+            </div>
+            <p className="text-[11px] text-slate-500">Contas a pagar e saídas de caixa</p>
+            <button
+              type="button"
+              onClick={() => backupService.exportTableToCSV('despesas-gastos-sige', expenses)}
+              className="w-full mt-1 py-1.5 px-3 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Exportar CSV
+            </button>
           </div>
         </div>
       </div>

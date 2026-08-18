@@ -16,6 +16,19 @@ import {
 import { generateVerificationHash, calculateMT } from '../utils/formatters';
 import { isEnrollmentRequirementsFulfilled } from '../utils/academicUtils';
 
+// Services Layer (Supabase PostgreSQL + Persistent Offline Layer)
+import { institutionService } from '../services/institutionService';
+import { academicService } from '../services/academicService';
+import { studentsService } from '../services/studentsService';
+import { teachersService } from '../services/teachersService';
+import { gradesService } from '../services/gradesService';
+import { paymentsService } from '../services/paymentsService';
+import { documentsService } from '../services/documentsService';
+import { usersService } from '../services/usersService';
+import { auditService } from '../services/auditService';
+import { isSupabaseConfigured } from '../lib/supabase';
+
+
 export const INSTITUTION_INFO: InstitutionInfo = {
   name: 'Complexo Escolar Girassol do Saber',
   subTitle: 'Ensino Primário, Iº e IIº Ciclos do Ensino Secundário Geral e Técnico',
@@ -177,8 +190,9 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [assessmentSchedules, setAssessmentSchedules] = useState<AssessmentSchedule[]>(INITIAL_ASSESSMENT_SCHEDULES);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
 
-  // Load from localStorage if present
+  // Load from Supabase and localStorage
   useEffect(() => {
+    // 1. Instant load from local storage
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -209,6 +223,53 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     } catch (e) {
       console.error('Error loading state from localStorage:', e);
+    }
+
+    // 2. Asynchronous sync from Supabase PostgreSQL if configured
+    if (isSupabaseConfigured()) {
+      (async () => {
+        try {
+          const [
+            inst,
+            supaStudents,
+            supaGrades,
+            supaReceipts,
+            supaExpenses,
+            supaRequests,
+            supaServices,
+            supaTeachers,
+            supaTurmas,
+            supaYears,
+            supaLogs
+          ] = await Promise.all([
+            institutionService.getInstitution(),
+            studentsService.getStudents(),
+            gradesService.getGrades(),
+            paymentsService.getReceipts(),
+            paymentsService.getExpenses(),
+            documentsService.getRequests(),
+            paymentsService.getFinancialServices(),
+            teachersService.getTeachers(),
+            academicService.getTurmas(),
+            academicService.getAcademicYears(),
+            auditService.getAuditLogs(),
+          ]);
+
+          if (inst) setInstitution(inst);
+          if (supaStudents && supaStudents.length > 0) setStudents(supaStudents);
+          if (supaGrades && supaGrades.length > 0) setGrades(supaGrades);
+          if (supaReceipts && supaReceipts.length > 0) setReceipts(supaReceipts);
+          if (supaExpenses && supaExpenses.length > 0) setExpenses(supaExpenses);
+          if (supaRequests && supaRequests.length > 0) setRequests(supaRequests);
+          if (supaServices && supaServices.length > 0) setFinancialServices(supaServices);
+          if (supaTeachers && supaTeachers.length > 0) setTeachers(supaTeachers);
+          if (supaTurmas && supaTurmas.length > 0) setTurmas(supaTurmas);
+          if (supaYears && supaYears.length > 0) setAcademicYears(supaYears);
+          if (supaLogs && supaLogs.length > 0) setAuditLogs(supaLogs);
+        } catch (err) {
+          console.warn('Sincronização inicial do Supabase com aviso:', err);
+        }
+      })();
     }
   }, []);
 
@@ -257,6 +318,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       ipAddress: '192.168.1.' + (10 + Math.floor(Math.random() * 80)),
     };
     setAuditLogs(prev => [newLog, ...prev]);
+    auditService.insertAuditLog(newLog);
   }, [currentUser]);
 
   // Role quota calculation
@@ -364,6 +426,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     setUsers(prev => [...prev, newUser]);
+    usersService.upsertUser(newUser);
     addAuditLog('SISTEMA', 'Registo de Utilizador', `Novo utilizador criado: ${newUser.name} (${newUser.role}) com anexos de Foto tipo passe, BI e Certificado.`);
     return { success: true, user: newUser };
   }, [currentUser, getRoleUserCount, users, addAuditLog]);
@@ -376,6 +439,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (currentUser?.id === id) {
           setCurrentUser(updated);
         }
+        usersService.upsertUser(updated);
         return updated;
       }
       return u;
@@ -397,6 +461,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     setUsers(prev => prev.filter(u => u.id !== id));
+    usersService.deleteUser(id);
     addAuditLog('SISTEMA', 'Eliminação de Utilizador', `Utilizador removido: ${userToDelete.name} (${userToDelete.role})`);
     return { success: true };
   }, [currentUser, users, addAuditLog]);
@@ -407,6 +472,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (u.id === userId) {
         const updated = { ...u, ...data };
         setCurrentUser(updated);
+        usersService.upsertUser(updated);
         return updated;
       }
       return u;
@@ -415,15 +481,23 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [currentUser?.name, addAuditLog]);
 
   const updateInstitution = useCallback((info: Partial<InstitutionInfo>) => {
-    setInstitution(prev => ({ ...prev, ...info }));
+    setInstitution(prev => {
+      const updated = { ...prev, ...info };
+      institutionService.updateInstitution(updated);
+      return updated;
+    });
     addAuditLog('CONFIGURACOES', 'Atualização dos Dados da Instituição', 'Dados cadastrais, logotipo e cabeçalho oficial atualizados pelo Administrador.');
   }, [addAuditLog]);
 
   const setActiveAcademicYearId = useCallback((id: string) => {
-    setAcademicYears(prev => prev.map(y => ({
-      ...y,
-      status: y.id === id ? 'ATIVO' : (y.status === 'ATIVO' ? 'PLANEADO' : y.status),
-    })));
+    setAcademicYears(prev => prev.map(y => {
+      const updated = {
+        ...y,
+        status: y.id === id ? ('ATIVO' as const) : (y.status === 'ATIVO' ? ('PLANEADO' as const) : y.status),
+      };
+      academicService.upsertAcademicYear(updated);
+      return updated;
+    }));
     addAuditLog('CONFIGURACOES', 'Alteração de Ano Letivo Ativo', `Ano letivo ID ${id} definido como ativo.`);
   }, [addAuditLog]);
 
@@ -437,11 +511,19 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       confirmationStatus: yearData.confirmationStatus || 'ABERTO',
     };
     setAcademicYears(prev => [newYear, ...prev]);
+    academicService.upsertAcademicYear(newYear);
     addAuditLog('CONFIGURACOES', 'Criação de Ano Letivo', `Ano letivo ${yearData.code} adicionado.`);
   }, [addAuditLog]);
 
   const updateAcademicYear = useCallback((id: string, yearData: Partial<AcademicYear>) => {
-    setAcademicYears(prev => prev.map(y => y.id === id ? { ...y, ...yearData } : y));
+    setAcademicYears(prev => prev.map(y => {
+      if (y.id === id) {
+        const updated = { ...y, ...yearData };
+        academicService.upsertAcademicYear(updated);
+        return updated;
+      }
+      return y;
+    }));
     addAuditLog('CONFIGURACOES', 'Edição de Ano Letivo', `Ano letivo ID ${id} atualizado.`);
   }, [addAuditLog]);
 
@@ -449,8 +531,10 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setAcademicYears(prev => prev.map(y => {
       if (y.id === academicYearId) {
         const nextStatus = y.enrollmentStatus === 'ABERTO' ? 'FECHADO' : 'ABERTO';
+        const updated = { ...y, enrollmentStatus: nextStatus as 'ABERTO' | 'FECHADO' };
+        academicService.upsertAcademicYear(updated);
         addAuditLog('SECRETARIA', 'Alteração do Período de Matrículas', `Período de Matrículas do ano ${y.code} alterado para: ${nextStatus}`);
-        return { ...y, enrollmentStatus: nextStatus };
+        return updated;
       }
       return y;
     }));
@@ -460,8 +544,10 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setAcademicYears(prev => prev.map(y => {
       if (y.id === academicYearId) {
         const nextStatus = y.confirmationStatus === 'ABERTO' ? 'FECHADO' : 'ABERTO';
+        const updated = { ...y, confirmationStatus: nextStatus as 'ABERTO' | 'FECHADO' };
+        academicService.upsertAcademicYear(updated);
         addAuditLog('SECRETARIA', 'Alteração do Período de Confirmações', `Período de Confirmações do ano ${y.code} alterado para: ${nextStatus}`);
-        return { ...y, confirmationStatus: nextStatus };
+        return updated;
       }
       return y;
     }));
@@ -478,19 +564,28 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       updatedAt: now,
     };
     setFinancialServices(prev => [newService, ...prev]);
+    paymentsService.upsertFinancialService(newService);
     addAuditLog('FINANCEIRO', 'Cadastro de Serviço Financeiro', `Novo serviço/produto cadastrado: ${newService.name} (${newService.basePrice} Kz)`);
     return newService;
   }, [addAuditLog]);
 
   const updateFinancialService = useCallback((id: string, data: Partial<FinancialService>) => {
     const now = new Date().toISOString();
-    setFinancialServices(prev => prev.map(s => s.id === id ? { ...s, ...data, updatedAt: now } : s));
+    setFinancialServices(prev => prev.map(s => {
+      if (s.id === id) {
+        const updated = { ...s, ...data, updatedAt: now };
+        paymentsService.upsertFinancialService(updated);
+        return updated;
+      }
+      return s;
+    }));
     addAuditLog('FINANCEIRO', 'Atualização de Serviço Financeiro', `Serviço financeiro ID ${id} atualizado.`);
   }, [addAuditLog]);
 
   const deleteFinancialService = useCallback((id: string) => {
     const srv = financialServices.find(s => s.id === id);
     setFinancialServices(prev => prev.filter(s => s.id !== id));
+    paymentsService.deleteFinancialService(id);
     addAuditLog('FINANCEIRO', 'Remoção de Serviço Financeiro', `Serviço financeiro ${srv?.name || id} removido do catálogo.`);
   }, [financialServices, addAuditLog]);
 
@@ -498,8 +593,10 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setFinancialServices(prev => prev.map(s => {
       if (s.id === id) {
         const nextStatus = s.status === 'ATIVO' ? 'INATIVO' : 'ATIVO';
+        const updated = { ...s, status: nextStatus as 'ATIVO' | 'INATIVO', updatedAt: new Date().toISOString() };
+        paymentsService.upsertFinancialService(updated);
         addAuditLog('FINANCEIRO', 'Alteração de Estado de Serviço', `Serviço ${s.name} alterado para: ${nextStatus}`);
-        return { ...s, status: nextStatus, updatedAt: new Date().toISOString() };
+        return updated;
       }
       return s;
     }));
@@ -509,6 +606,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const id = `TRM-${Date.now()}`;
     const newTurma: Turma = { ...turmaData, id };
     setTurmas(prev => [...prev, newTurma]);
+    academicService.upsertTurma(newTurma);
     addAuditLog('PEDAGOGICO', 'Criação de Turma', `Nova turma criada: ${newTurma.name} (${newTurma.shift})`);
   }, [addAuditLog]);
 
@@ -516,11 +614,19 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const id = `TCH-${String(Date.now()).slice(-4)}`;
     const newTeacher: Teacher = { ...teacherData, id };
     setTeachers(prev => [...prev, newTeacher]);
+    teachersService.upsertTeacher(newTeacher);
     addAuditLog('PEDAGOGICO', 'Registo de Docente', `Professor registado: ${newTeacher.name} (BI: ${newTeacher.biNumber})`);
   }, [addAuditLog]);
 
   const updateTeacher = useCallback((id: string, teacherData: Partial<Teacher>) => {
-    setTeachers(prev => prev.map(t => t.id === id ? { ...t, ...teacherData } : t));
+    setTeachers(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, ...teacherData };
+        teachersService.upsertTeacher(updated);
+        return updated;
+      }
+      return t;
+    }));
     addAuditLog('PEDAGOGICO', 'Atualização de Docente', `Dados do professor ID ${id} atualizados.`);
   }, [addAuditLog]);
 
@@ -549,12 +655,20 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     setStudents(prev => [newStudent, ...prev]);
+    studentsService.upsertStudent(newStudent);
     addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado com estado PENDENTE DE PAGAMENTO: ${newStudent.fullName} (Aguardando 1ª propina e cartão).`);
     return newStudent;
   }, [students.length, addAuditLog]);
 
   const updateStudent = useCallback((id: string, data: Partial<Student>) => {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    setStudents(prev => prev.map(s => {
+      if (s.id === id) {
+        const updated = { ...s, ...data };
+        studentsService.upsertStudent(updated);
+        return updated;
+      }
+      return s;
+    }));
     addAuditLog('SECRETARIA', 'Atualização de Estudante', `Ficha do estudante ID ${id} atualizada.`);
   }, [addAuditLog]);
 
@@ -584,6 +698,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [currentUser?.role, currentUser?.name, addAuditLog]);
 
   const saveMinipautaGrades = useCallback((newOrUpdatedGrades: Omit<GradeRecord, 'id' | 'updatedAt' | 'updatedBy'>[]) => {
+    const gradesToPersist: GradeRecord[] = [];
     setGrades(prev => {
       const updated = [...prev];
       const now = new Date().toISOString();
@@ -597,26 +712,31 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         );
 
         if (index >= 0) {
-          updated[index] = {
+          const rec: GradeRecord = {
             ...updated[index],
             ...item,
             mt: calculateMT(item.mac, item.npt),
             updatedAt: now,
             updatedBy,
           };
+          updated[index] = rec;
+          gradesToPersist.push(rec);
         } else {
-          updated.push({
+          const rec: GradeRecord = {
             ...item,
             id: `GRD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             mt: calculateMT(item.mac, item.npt),
             updatedAt: now,
             updatedBy,
-          });
+          };
+          updated.push(rec);
+          gradesToPersist.push(rec);
         }
       }
       return updated;
     });
 
+    gradesService.saveBatchGrades(gradesToPersist);
     addAuditLog('PEDAGOGICO', 'Lançamento de Notas na Minipauta', `Lançadas/atualizadas notas de ${newOrUpdatedGrades.length} registo(s) de avaliação (Fórmula MT = MAC 50% + NPT 50%).`);
   }, [currentUser?.name, addAuditLog]);
 
@@ -666,13 +786,21 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     setReceipts(prev => [newReceipt, ...prev]);
+    paymentsService.upsertReceipt(newReceipt);
 
     // Auto-activate enrollment if student was pending and now paid 1st month tuition and student card
     if (student.status === 'PENDENTE_PAGAMENTO') {
       const allUpdatedReceipts = [newReceipt, ...receipts];
       const check = isEnrollmentRequirementsFulfilled(student.id, allUpdatedReceipts, activeAcademicYear);
       if (check.fulfilled) {
-        setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: 'MATRICULADO' } : s));
+        setStudents(prev => prev.map(s => {
+          if (s.id === student.id) {
+            const updated = { ...s, status: 'MATRICULADO' as const };
+            studentsService.upsertStudent(updated);
+            return updated;
+          }
+          return s;
+        }));
         addAuditLog('SECRETARIA', 'Efetivação de Matrícula', `Matrícula ativada com sucesso para ${student.fullName} (${student.id}) após liquidação da 1ª propina e cartão.`);
       }
     }
@@ -682,10 +810,14 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [students, receipts, activeAcademicYear, currentUser?.id, currentUser?.name, addAuditLog]);
 
   const cancelReceipt = useCallback((receiptId: string, reason: string) => {
-    setReceipts(prev => prev.map(r => r.id === receiptId ? {
-      ...r,
-      status: 'ANULADO',
-    } : r));
+    setReceipts(prev => prev.map(r => {
+      if (r.id === receiptId) {
+        const updated = { ...r, status: 'ANULADO' as const };
+        paymentsService.upsertReceipt(updated);
+        return updated;
+      }
+      return r;
+    }));
 
     addAuditLog('CAIXA_FINANCAS', 'Anulação de Recibo', `Recibo ID ${receiptId} anulado. Motivo: ${reason}`);
   }, [addAuditLog]);
@@ -699,6 +831,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     setExpenses(prev => [newExpense, ...prev]);
+    paymentsService.insertExpense(newExpense);
     addAuditLog('FINANCEIRO', 'Registo de Despesa', `Despesa de ${newExpense.amount} Kz registada: ${newExpense.description}`);
   }, [currentUser?.name, addAuditLog]);
 
@@ -726,16 +859,20 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     setRequests(prev => [newReq, ...prev]);
+    documentsService.upsertRequest(newReq);
     addAuditLog('DOCUMENTOS', 'Solicitação de Documento', `Requerimento ${requestNumber} emitido para estudante ${student?.fullName || reqData.studentId}`);
     return newReq;
   }, [requests.length, students, turmas, courses, addAuditLog]);
 
   const updateRequestStatus = useCallback((id: string, status: DocumentRequest['status'], notes?: string) => {
-    setRequests(prev => prev.map(r => r.id === id ? {
-      ...r,
-      status,
-      notes: notes || r.notes,
-    } : r));
+    setRequests(prev => prev.map(r => {
+      if (r.id === id) {
+        const updated = { ...r, status, notes: notes || r.notes };
+        documentsService.upsertRequest(updated);
+        return updated;
+      }
+      return r;
+    }));
 
     addAuditLog('DOCUMENTOS', 'Atualização de Estado de Requerimento', `Requerimento ID ${id} alterado para estado: ${status}`);
   }, [addAuditLog]);
