@@ -1,15 +1,41 @@
 <!doctype html>
-<html lang="pt-AO">
+<html lang="pt-AO" class="light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SIGE Angola - Sistema Integrado de Gestão Escolar</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#1e3a8a" />
+    <title>SIGE Angola - Complexo Escolar St.Roque | Sistema Integrado de Gestão Escolar</title>
     <meta name="description" content="Sistema Integrado de Gestão Escolar adaptado ao contexto de ensino angolano (moeda Kwanza Kz, avaliação trimestral MAC/NPP/NPT, emissão de pautas e RBAC)." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      /* Critical base CSS fallback before JavaScript & bundle loads */
+      :root {
+        color-scheme: light;
+        --sige-primary: #1e3a8a;
+        --sige-background: #f1f5f9;
+        --sige-text: #0f172a;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #f1f5f9;
+        color: #0f172a;
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        min-height: 100vh;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+    </style>
   </head>
-  <body className="bg-slate-100 text-slate-900 antialiased font-sans">
+  <body class="bg-slate-100 text-slate-900 antialiased font-sans">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
