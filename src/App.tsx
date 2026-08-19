@@ -31,9 +31,37 @@ const MainLayout: React.FC = () => {
     return <LoginPortal />;
   }
 
-  // Render active view based on tab
+  // Render active view based on tab with strict RBAC enforcement
   const renderActiveView = () => {
-    switch ((activeTab || 'dashboard').toLowerCase()) {
+    const tab = (activeTab || 'dashboard').toLowerCase();
+
+    // Strict constraint: Teacher role has access EXCLUSIVELY to pedagogical modules
+    if (currentUser.role === 'PROFESSOR') {
+      const allowedTeacherTabs = ['dashboard', 'minipauta', 'pauta_geral', 'horarios_provas', 'horarios'];
+      if (!allowedTeacherTabs.includes(tab)) {
+        return (
+          <div className="bg-white rounded-2xl border border-amber-200 p-8 text-center space-y-4 shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+              <span className="text-xl font-black">!</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Acesso Restrito ao Módulo Pedagógico</h2>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                O seu perfil docente (Professor) tem acesso exclusivo ao módulo pedagógico (Minipautas de Avaliação, Pautas Gerais e Horários).
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab('minipauta')}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Ir para a Minipauta de Notas
+            </button>
+          </div>
+        );
+      }
+    }
+
+    switch (tab) {
       case 'dashboard':
         return <OverviewDashboard onNavigateTab={setActiveTab} />;
       case 'estudantes':

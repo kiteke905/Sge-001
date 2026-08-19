@@ -95,9 +95,9 @@ export const CashRegisterPOS: React.FC = () => {
   }, [selectedStudentId, receipts, activeAcademicYear]);
 
   const enrollmentCheck = useMemo(() => {
-    if (!selectedStudentId || !activeAcademicYear) return { fulfilled: false, missingItems: [] };
-    return isEnrollmentRequirementsFulfilled(selectedStudentId, receipts, activeAcademicYear);
-  }, [selectedStudentId, receipts, activeAcademicYear]);
+    if (!selectedStudentId || !activeAcademicYear || !selectedStudent) return { fulfilled: false, hasFee: false, hasFirstMonth: false, hasCard: false, missingItems: [], feeTypeName: 'Taxa de Matrícula' };
+    return isEnrollmentRequirementsFulfilled(selectedStudentId, receipts, activeAcademicYear, selectedStudent);
+  }, [selectedStudentId, selectedStudent, receipts, activeAcademicYear]);
 
   // Set default month when student changes or nextPayableMonth updates
   React.useEffect(() => {
@@ -189,17 +189,41 @@ export const CashRegisterPOS: React.FC = () => {
     setApplyLateFee(false);
   };
 
-  // Quick 1-click add for enrollment package
+  // Quick 1-click add for enrollment package (Fee + 1st Month + Card)
   const handleAddEnrollmentPackage = () => {
     if (!selectedStudent) return;
+    const isConfirmation = selectedStudent.enrollmentType === 'CONFIRMACAO';
+    const feeType = isConfirmation ? 'CONFIRMACAO' : 'MATRICULA';
+    const feeLabel = isConfirmation ? 'Taxa de Confirmação de Matrícula' : 'Taxa de Matrícula';
+
     const firstMonth = activeAcademicYear?.tuitionMonths?.[0] || 'Setembro';
     const firstMonthLower = (firstMonth || 'Setembro').toLowerCase().trim();
+    const feeSrv = financialServices.find(s => s.serviceType === feeType) || { basePrice: isConfirmation ? 12000 : 15000 };
     const tuitionSrv = financialServices.find(s => s.serviceType === 'PROPINA_MENSAL') || { basePrice: 35000 };
     const cardSrv = financialServices.find(s => s.serviceType === 'CARTAO_ESTUDANTE') || { basePrice: 3500 };
 
     const itemsToAdd: Omit<PaymentItem, 'id'>[] = [];
 
-    // Check if 1st month already in cart or paid
+    // 1. Check if enrollment fee is paid or in cart
+    const isFeePaid = receipts.some(r => 
+      r.studentId === selectedStudent.id && 
+      r.status === 'EMITIDO' && 
+      r.items.some(it => it.serviceType === 'MATRICULA' || it.serviceType === 'CONFIRMACAO')
+    );
+    const isFeeInCart = cartItems.some(it => it.serviceType === 'MATRICULA' || it.serviceType === 'CONFIRMACAO');
+
+    if (!isFeePaid && !isFeeInCart) {
+      itemsToAdd.push({
+        serviceType: feeType as any,
+        description: feeLabel,
+        baseAmount: feeSrv.basePrice,
+        lateFee: 0,
+        quantity: 1,
+        totalAmount: feeSrv.basePrice,
+      });
+    }
+
+    // 2. Check if 1st month already in cart or paid
     const isFirstMonthPaid = receipts.some(r => 
       r.studentId === selectedStudent.id && 
       r.status === 'EMITIDO' && 
@@ -210,7 +234,7 @@ export const CashRegisterPOS: React.FC = () => {
     if (!isFirstMonthPaid && !isFirstMonthInCart) {
       itemsToAdd.push({
         serviceType: 'PROPINA_MENSAL',
-        description: `Propina Mensal: ${firstMonth} (1º Mês de Matrícula)`,
+        description: `Propina Mensal: ${firstMonth} (1º Mês Obrigatório)`,
         targetMonth: firstMonth,
         baseAmount: tuitionSrv.basePrice,
         lateFee: 0,
@@ -219,7 +243,7 @@ export const CashRegisterPOS: React.FC = () => {
       });
     }
 
-    // Check if card fee is paid or in cart
+    // 3. Check if card fee is paid or in cart
     const isCardPaid = receipts.some(r => 
       r.studentId === selectedStudent.id && 
       r.status === 'EMITIDO' && 
@@ -442,23 +466,36 @@ export const CashRegisterPOS: React.FC = () => {
 
                   {/* Pending Payment Notice & Quick Package Button */}
                   {selectedStudent.status === 'PENDENTE_PAGAMENTO' && (
-                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
-                      <div className="flex items-start gap-2 text-xs text-amber-900">
+                    <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-300 space-y-2.5">
+                      <div className="flex items-start gap-2.5 text-xs text-amber-950">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="block">Requisitos de Efetivação de Matrícula:</strong>
-                          <span>
-                            Para ativar esta matrícula no sistema é obrigatório liquidar a <strong>1ª Propina ({activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'})</strong> e o <strong>Cartão de Estudante</strong>.
-                          </span>
+                          <strong className="block text-xs font-bold text-amber-950">Requisitos Obrigatórios para Efetivar Matrícula:</strong>
+                          <p className="mt-0.5 text-[11px] text-amber-900 leading-relaxed">
+                            Para efetivar e ativar o estudante no sistema é obrigatório liquidar o pacote inicial de 3 pagamentos: 
+                            <strong> 1. {selectedStudent.enrollmentType === 'CONFIRMACAO' ? 'Taxa de Confirmação' : 'Taxa de Matrícula'}</strong> + 
+                            <strong> 2. 1ª Propina ({activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'})</strong> + 
+                            <strong> 3. Cartão de Estudante</strong>.
+                          </p>
+                          {enrollmentCheck.missingItems.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+                              <span className="text-[10px] font-semibold text-amber-800">Itens em falta:</span>
+                              {enrollmentCheck.missingItems.map((item, idx) => (
+                                <span key={idx} className="px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900 text-[10px] font-bold border border-amber-300">
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={handleAddEnrollmentPackage}
-                        className="w-full py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                        className="w-full py-2.5 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Adicionar Pacote de Efetivação ao Carrinho (1ª Propina + Cartão)</span>
+                        <span>Adicionar Pacote de Efetivação ao Carrinho ({selectedStudent.enrollmentType === 'CONFIRMACAO' ? 'Taxa Confirmação' : 'Taxa Matrícula'} + 1ª Propina + Cartão)</span>
                       </button>
                     </div>
                   )}

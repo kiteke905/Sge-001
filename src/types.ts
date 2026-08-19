@@ -183,6 +183,7 @@ export interface Student {
   shift: 'MANHA' | 'TARDE' | 'NOITE';
   studentNumber: number; // Número de ordem na turma
   enrollmentDate: string;
+  enrollmentType?: 'NOVA_MATRICULA' | 'CONFIRMACAO';
   status: 'PENDENTE_PAGAMENTO' | 'MATRICULADO' | 'CONFIRMADO' | 'TRANSFERIDO' | 'DESISTENTE' | 'SUSPENSO';
   
   // Document checklist

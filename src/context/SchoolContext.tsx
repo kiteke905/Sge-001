@@ -920,6 +920,19 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [addAuditLog]);
 
   const enrollStudent = useCallback((studentData: Omit<Student, 'id' | 'studentNumber' | 'enrollmentDate'>): Student => {
+    // 1) Strict Duplicate Check: prevent registration if Full Name and BI Number are equal
+    const normalizedName = (studentData.fullName || '').trim().toLowerCase();
+    const normalizedBi = (studentData.biNumber || '').trim().toUpperCase();
+
+    const duplicateStudent = students.find(s => 
+      s.fullName.trim().toLowerCase() === normalizedName && 
+      s.biNumber.trim().toUpperCase() === normalizedBi
+    );
+
+    if (duplicateStudent) {
+      throw new Error(`Estudante já registado no sistema! Já existe um aluno cadastrado com o mesmo Nome Completo ("${duplicateStudent.fullName}") e mesmo Nº de BI ("${duplicateStudent.biNumber}") sob o Nº de Processo ${duplicateStudent.id}.`);
+    }
+
     const maxNum = students.reduce((max, s) => Math.max(max, Number(s.studentNumber) || 0), 0);
     const currentNumber = maxNum > 0 ? maxNum + 1 : students.length + 1;
     const id = `EST-${new Date().getFullYear()}-${String(currentNumber).padStart(4, '0')}`;
@@ -932,7 +945,8 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       id,
       studentNumber: currentNumber,
       enrollmentDate: new Date().toISOString().split('T')[0],
-      status: studentData.status || 'CONFIRMADO',
+      enrollmentType: studentData.enrollmentType || 'NOVA_MATRICULA',
+      status: studentData.status || 'PENDENTE_PAGAMENTO',
       turmaName: targetTurma?.name || studentData.turmaName || 'Turma Atribuída',
       courseName: targetCourse?.name || studentData.courseName || 'Geral',
     };
@@ -942,7 +956,7 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (cloudSyncService.isConfigured()) {
       cloudSyncService.saveDocument('estudantes', newStudent);
     }
-    addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado com sucesso: ${newStudent.fullName} (${newStudent.id}) na turma ${newStudent.turmaName}.`);
+    addAuditLog('SECRETARIA', 'Nova Inscrição / Matrícula', `Estudante registado (Pendente de Pagamento): ${newStudent.fullName} (${newStudent.id}) na turma ${newStudent.turmaName}.`);
     return newStudent;
   }, [students, turmas, courses, addAuditLog]);
 
@@ -1084,20 +1098,27 @@ export const SchoolProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setReceipts(prev => [newReceipt, ...prev]);
     paymentsService.upsertReceipt(newReceipt);
 
-    // Auto-activate enrollment if student was pending and now paid 1st month tuition and student card
+    // Auto-activate enrollment if student was pending and now paid 3 mandatory initial requirements:
+    // 1) Taxa de Matrícula ou Taxa de Confirmação (dependendo do caso)
+    // 2) 1º Mês de Propinas
+    // 3) Cartão de Estudante
     if (student.status === 'PENDENTE_PAGAMENTO') {
       const allUpdatedReceipts = [newReceipt, ...receipts];
-      const check = isEnrollmentRequirementsFulfilled(student.id, allUpdatedReceipts, activeAcademicYear);
+      const check = isEnrollmentRequirementsFulfilled(student.id, allUpdatedReceipts, activeAcademicYear, student);
       if (check.fulfilled) {
+        const newStatus: Student['status'] = student.enrollmentType === 'CONFIRMACAO' ? 'CONFIRMADO' : 'MATRICULADO';
         setStudents(prev => prev.map(s => {
           if (s.id === student.id) {
-            const updated = { ...s, status: 'MATRICULADO' as const };
+            const updated = { ...s, status: newStatus };
             studentsService.upsertStudent(updated);
+            if (cloudSyncService.isConfigured()) {
+              cloudSyncService.saveDocument('estudantes', updated);
+            }
             return updated;
           }
           return s;
         }));
-        addAuditLog('SECRETARIA', 'Efetivação de Matrícula', `Matrícula ativada com sucesso para ${student.fullName} (${student.id}) após liquidação da 1ª propina e cartão.`);
+        addAuditLog('SECRETARIA', 'Efetivação de Matrícula', `Matrícula/Confirmação ativada (${newStatus}) para ${student.fullName} (${student.id}) após liquidação obrigatória de: ${check.feeTypeName}, 1ª propina e cartão de estudante.`);
       }
     }
 

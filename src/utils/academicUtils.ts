@@ -197,21 +197,34 @@ export function isTuitionMonthPayable(
 }
 
 /**
- * Checks if the student has paid both:
- * 1) 1st Month Tuition of the academic year
- * 2) Student Card fee (CARTAO_ESTUDANTE)
+ * Checks if the student has paid all 3 mandatory initial items:
+ * 1) Enrollment or Confirmation Fee (Taxa de Matrícula ou Confirmação)
+ * 2) 1st Month Tuition of the academic year (1º Mês de Propinas)
+ * 3) Student Card fee (Cartão de Estudante)
  */
 export function isEnrollmentRequirementsFulfilled(
   studentId: string,
   receipts: PaymentReceipt[],
-  academicYear?: AcademicYear
-): { fulfilled: boolean; hasFirstMonth: boolean; hasCard: boolean; missingItems: string[] } {
+  academicYear?: AcademicYear,
+  student?: Student
+): { 
+  fulfilled: boolean; 
+  hasFee: boolean;
+  hasFirstMonth: boolean; 
+  hasCard: boolean; 
+  missingItems: string[];
+  feeTypeName: string;
+} {
   const months = getTuitionMonthsForAcademicYear(academicYear);
   const firstMonth = months[0]?.trim() || 'Setembro';
   const firstMonthPrefix = firstMonth.split('/')[0].trim();
 
+  const isConfirmation = student?.enrollmentType === 'CONFIRMACAO';
+  const feeTypeName = isConfirmation ? 'Taxa de Confirmação de Matrícula' : 'Taxa de Matrícula';
+
   const studentReceipts = receipts.filter(r => r.studentId === studentId && r.status === 'EMITIDO');
 
+  let hasFee = false;
   let hasFirstMonth = false;
   let hasCard = false;
 
@@ -220,6 +233,20 @@ export function isEnrollmentRequirementsFulfilled(
 
   for (const r of studentReceipts) {
     for (const item of r.items) {
+      // 1) Fee: Check if Matrícula or Confirmação was paid
+      if (item.serviceType === 'MATRICULA' || item.serviceType === 'CONFIRMACAO') {
+        if (isConfirmation) {
+          if (item.serviceType === 'CONFIRMACAO' || item.serviceType === 'MATRICULA') {
+            hasFee = true;
+          }
+        } else {
+          if (item.serviceType === 'MATRICULA' || item.serviceType === 'CONFIRMACAO') {
+            hasFee = true;
+          }
+        }
+      }
+
+      // 2) 1st Month Tuition
       if (item.serviceType === 'PROPINA_MENSAL' && item.targetMonth) {
         const itemMonthLower = (item.targetMonth || '').toLowerCase().trim();
         if (
@@ -229,6 +256,8 @@ export function isEnrollmentRequirementsFulfilled(
           hasFirstMonth = true;
         }
       }
+
+      // 3) Student Card
       if (item.serviceType === 'CARTAO_ESTUDANTE') {
         hasCard = true;
       }
@@ -236,13 +265,16 @@ export function isEnrollmentRequirementsFulfilled(
   }
 
   const missingItems: string[] = [];
+  if (!hasFee) missingItems.push(feeTypeName);
   if (!hasFirstMonth) missingItems.push(`1ª Propina (${firstMonth})`);
-  if (!hasCard) missingItems.push('Cartão Magnético de Estudante');
+  if (!hasCard) missingItems.push('Cartão de Estudante');
 
   return {
-    fulfilled: hasFirstMonth && hasCard,
+    fulfilled: hasFee && hasFirstMonth && hasCard,
+    hasFee,
     hasFirstMonth,
     hasCard,
     missingItems,
+    feeTypeName,
   };
 }

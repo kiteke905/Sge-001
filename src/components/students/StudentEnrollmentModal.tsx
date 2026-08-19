@@ -20,7 +20,7 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
   studentToEdit 
 }) => {
   const { 
-    courses, classes, turmas, activeAcademicYear, 
+    courses, classes, turmas, activeAcademicYear, students,
     enrollStudent, updateStudent, canEnrollStudent, isGestorReadOnly, institution 
   } = useSchool();
 
@@ -43,12 +43,13 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
     guardianProfession: studentToEdit?.guardianProfession || '',
 
     // Academic
+    enrollmentType: (studentToEdit?.enrollmentType || 'NOVA_MATRICULA') as 'NOVA_MATRICULA' | 'CONFIRMACAO',
     academicYearId: studentToEdit?.academicYearId || activeAcademicYear?.id || 'AY-2025-2026',
     courseId: studentToEdit?.courseId || (courses[0]?.id || ''),
     classId: studentToEdit?.classId || 'CLS-10',
     turmaId: studentToEdit?.turmaId || (turmas[0]?.id || ''),
     shift: (studentToEdit?.shift || 'MANHA') as 'MANHA' | 'TARDE' | 'NOITE',
-    status: (studentToEdit?.status || 'CONFIRMADO') as Student['status'],
+    status: (studentToEdit?.status || 'PENDENTE_PAGAMENTO') as Student['status'],
 
     // Documents Checklist
     documentsSubmitted: {
@@ -63,6 +64,18 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
   const [downloadPdfAfter, setDownloadPdfAfter] = useState(true);
 
   if (!isOpen) return null;
+
+  // Duplicate Check: compare normalized name and BI
+  const normalizedInputName = (formData.fullName || '').trim().toLowerCase();
+  const normalizedInputBi = (formData.biNumber || '').trim().toUpperCase();
+
+  const duplicateStudent = (normalizedInputName.length > 2 && normalizedInputBi.length > 3)
+    ? students.find(s => 
+        (!studentToEdit || s.id !== studentToEdit.id) &&
+        s.fullName.trim().toLowerCase() === normalizedInputName &&
+        s.biNumber.trim().toUpperCase() === normalizedInputBi
+      )
+    : undefined;
 
   // Filter turmas by course/class
   const filteredTurmas = turmas.filter(t => 
@@ -82,27 +95,52 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
       return;
     }
 
-    if (studentToEdit) {
-      updateStudent(studentToEdit.id, formData);
-      alert(`Dados do estudante ${formData.fullName} atualizados com sucesso!`);
-    } else {
-      const newStudent = enrollStudent(formData);
-      if (downloadPdfAfter) {
-        const turma = turmas.find(t => t.id === newStudent.turmaId);
-        const course = courses.find(c => c.id === newStudent.courseId);
-        const cls = classes.find(c => c.id === newStudent.classId);
-        generateEnrollmentFormPDF(
-          newStudent, 
-          turma?.name || 'Turma A', 
-          course?.name || 'Geral', 
-          cls?.name || '10ª Classe',
-          institution
-        );
-      }
-      alert(`Matrícula efetuada com sucesso! Número de Processo gerado: ${newStudent.id}`);
+    // Strict validation: Prevent duplicate registration if name and BI are equal
+    if (duplicateStudent) {
+      alert(
+        `⚠️ REGISTO NÃO PERMITIDO (DUPLICIDADE DETETADA):\n\n` +
+        `Já existe um estudante registado no sistema com o mesmo Nome Completo ("${duplicateStudent.fullName}") e mesmo Número de BI ("${duplicateStudent.biNumber}").\n\n` +
+        `• Número de Processo: ${duplicateStudent.id}\n` +
+        `• Turma Atual: ${duplicateStudent.turmaName || 'N/A'}\n` +
+        `• Estado Atual: ${duplicateStudent.status}\n\n` +
+        `O sistema não permite duplicar matrículas com nome e BI idênticos.`
+      );
+      return;
     }
 
-    onClose();
+    try {
+      if (studentToEdit) {
+        updateStudent(studentToEdit.id, formData);
+        alert(`Dados do estudante ${formData.fullName} atualizados com sucesso!`);
+      } else {
+        const newStudent = enrollStudent(formData);
+        if (downloadPdfAfter) {
+          const turma = turmas.find(t => t.id === newStudent.turmaId);
+          const course = courses.find(c => c.id === newStudent.courseId);
+          const cls = classes.find(c => c.id === newStudent.classId);
+          generateEnrollmentFormPDF(
+            newStudent, 
+            turma?.name || 'Turma A', 
+            course?.name || 'Geral', 
+            cls?.name || '10ª Classe',
+            institution
+          );
+        }
+        alert(
+          `Matrícula/Inscrição registada com sucesso!\n\n` +
+          `• Nome: ${newStudent.fullName}\n` +
+          `• Nº de Processo: ${newStudent.id}\n` +
+          `• Estado: Pendente de Pagamento\n\n` +
+          `ℹ️ A matrícula ficará pendente até que sejam liquidados no Caixa POS os 3 pagamentos obrigatórios:\n` +
+          `1. ${formData.enrollmentType === 'CONFIRMACAO' ? 'Taxa de Confirmação de Matrícula' : 'Taxa de Nova Matrícula'}\n` +
+          `2. 1º Mês de Propinas (${activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'})\n` +
+          `3. Cartão de Estudante`
+        );
+      }
+      onClose();
+    } catch (err: any) {
+      alert(err.message || 'Ocorreu um erro ao processar a matrícula.');
+    }
   };
 
   const handleDocToggle = (key: keyof typeof formData.documentsSubmitted) => {
@@ -143,23 +181,87 @@ export const StudentEnrollmentModal: React.FC<StudentEnrollmentModalProps> = ({
 
         {/* Status notice */}
         {!studentToEdit && (
-          <div className="bg-amber-50/80 border-b border-amber-200/80 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <strong>Regulamento Financeiro:</strong> A matrícula ficará com estado <strong>Pendente de Pagamento</strong> até que seja liquidada a 1ª propina ({activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'}) e a taxa do Cartão de Estudante no Caixa.
-              </span>
+          <div className="bg-amber-50/90 border-b border-amber-200 px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-900">
+            <div className="flex items-start sm:items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+              <div>
+                <strong>Regulamento de Efetivação de Matrícula:</strong> A inscrição é registada como <strong>Pendente de Pagamento</strong> e apenas é ativada após liquidação obrigatória de:
+                <span className="font-semibold text-amber-950"> 1. Taxa de {formData.enrollmentType === 'CONFIRMACAO' ? 'Confirmação' : 'Matrícula'}</span> + 
+                <span className="font-semibold text-amber-950"> 2. 1ª Propina ({activeAcademicYear?.tuitionMonths?.[0] || 'Setembro'})</span> + 
+                <span className="font-semibold text-amber-950"> 3. Cartão de Estudante</span>.
+              </div>
             </div>
             {activeAcademicYear?.enrollmentStatus === 'FECHADO' && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shrink-0 self-start sm:self-auto">
                 Período Encerrado
               </span>
             )}
           </div>
         )}
 
+        {/* Real-time duplicate error banner */}
+        {duplicateStudent && (
+          <div className="bg-rose-50 border-b border-rose-300 px-6 py-3 flex items-start gap-3 text-xs text-rose-900 animate-pulse">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-sm font-black text-rose-950">
+                Atenção: Estudante Já Registado no Sistema!
+              </strong>
+              <p className="mt-0.5 text-rose-800">
+                Já existe um estudante com o mesmo Nome Completo (<strong>{duplicateStudent.fullName}</strong>) e mesmo BI (<strong>{duplicateStudent.biNumber}</strong>) registado sob o Nº de Processo <strong>{duplicateStudent.id}</strong> na turma <strong>{duplicateStudent.turmaName || 'N/A'}</strong>. O sistema não permite registar uma nova matrícula para este aluno.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Section 0: Tipo de Inscrição */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <label className="block text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
+              Tipo de Processo / Inscrição *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                formData.enrollmentType === 'NOVA_MATRICULA' 
+                  ? 'border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20' 
+                  : 'border-slate-200 bg-white hover:bg-slate-100'
+              }`}>
+                <input
+                  type="radio"
+                  name="enrollmentType"
+                  value="NOVA_MATRICULA"
+                  checked={formData.enrollmentType === 'NOVA_MATRICULA'}
+                  onChange={() => setFormData({ ...formData, enrollmentType: 'NOVA_MATRICULA' })}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <strong className="block text-xs font-bold text-slate-900">Nova Matrícula (Estudante Novo)</strong>
+                  <span className="text-[11px] text-slate-500">Aplica Taxa de Matrícula + 1ª Propina + Cartão</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                formData.enrollmentType === 'CONFIRMACAO' 
+                  ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20' 
+                  : 'border-slate-200 bg-white hover:bg-slate-100'
+              }`}>
+                <input
+                  type="radio"
+                  name="enrollmentType"
+                  value="CONFIRMACAO"
+                  checked={formData.enrollmentType === 'CONFIRMACAO'}
+                  onChange={() => setFormData({ ...formData, enrollmentType: 'CONFIRMACAO' })}
+                  className="text-amber-600 focus:ring-amber-500"
+                />
+                <div>
+                  <strong className="block text-xs font-bold text-slate-900">Confirmação de Matrícula (Renovação / Transição)</strong>
+                  <span className="text-[11px] text-slate-500">Aplica Taxa de Confirmação + 1ª Propina + Cartão</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
           {/* Section 1: Personal Data & Photo */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-blue-900 mb-3 flex items-center gap-2">
